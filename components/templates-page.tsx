@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState, useMemo, useEffect } from "react"
+import { Fragment, useState, useMemo, useEffect, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import {
   Table,
@@ -10,13 +10,23 @@ import {
   TableHeader,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Grid3X3, Table as TableIcon, Plus, FolderOpen, FileText, ChevronRight, Share2, MoreHorizontal, Clock } from "lucide-react"
+import { Grid3X3, Table as TableIcon, Plus, FolderOpen, FileText, ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { getBreadcrumbs, getNavChildren, getAncestorIds } from "@/lib/navigation"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { getBreadcrumbs, getNavChildren, getAncestorIds, getAllDescendantIds, ARTIFACT_TYPE_LABELS } from "@/lib/navigation"
 import { getStatusBadgeClass, getStatusLabel } from "@/lib/status-utils"
 import type { ItemStatus } from "@/lib/status-utils"
+import { useLocalStorage } from "@/hooks/use-local-storage"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useSortableData } from "@/hooks/use-sortable-data"
 import { useFilterableData } from "@/hooks/use-filterable-data"
@@ -31,8 +41,13 @@ import type { FilterColumnConfig } from "@/types/filters"
 
 interface TemplatesPageProps {
   folderType: string
+  typeFilter?: string           // filter items by artifact type, undefined = show all
   onAddNew?: (folderType: string) => void
   onItemNavigate?: (itemId: string) => void
+  onSwitchToAllTab?: () => void
+  tree?: import("@/types").TreeNavigationItem[]
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
 }
 
 const ADD_BUTTON_LABELS: Record<string, string> = {
@@ -51,6 +66,7 @@ interface DisplayItem {
   subtitle: string
   tag: string
   isFolder: boolean
+  artifactType?: string
   status?: ItemStatus
   updated: string
   updatedBy: string
@@ -63,28 +79,169 @@ interface DisplayItem {
   dataTable?: string
 }
 
+/** Shared action menu for table rows and grid cards — Rename / Delete with confirmation popovers */
+function ItemActionMenu({
+  item,
+  tree,
+  onRenameItem,
+  onDeleteItem,
+  triggerClassName,
+}: {
+  item: DisplayItem
+  tree?: import("@/types").TreeNavigationItem[]
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
+  triggerClassName?: string
+}) {
+  const [action, setAction] = useState<"rename" | "delete" | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (action === "rename") {
+      setTimeout(() => inputRef.current?.select(), 0)
+    }
+  }, [action])
+
+  return (
+    <Popover
+      open={action !== null}
+      onOpenChange={(open) => { if (!open) setAction(null) }}
+    >
+      <PopoverAnchor asChild>
+        <div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  "inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer",
+                  triggerClassName ?? "h-8 w-8"
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setRenameValue(item.title)
+                  setAction("rename")
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setAction("delete")
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        className="w-64"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {action === "delete" && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">Delete {item.isFolder ? "folder" : "item"}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                This will permanently delete &ldquo;{item.title}&rdquo;
+                {item.isFolder && tree && (() => {
+                  const count = getAllDescendantIds(item.id, tree).size
+                  return count > 0 ? <> and all {count} items inside it</> : null
+                })()}.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAction(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  onDeleteItem?.(item.id)
+                  setAction(null)
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        )}
+        {action === "rename" && (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (renameValue.trim()) {
+                onRenameItem?.(item.id, renameValue.trim())
+                setAction(null)
+              }
+            }}
+          >
+            <div>
+              <p className="text-sm font-medium mb-2">Rename {item.isFolder ? "folder" : "item"}</p>
+              <Input
+                ref={inputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Item name"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" type="button" onClick={() => setAction(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="h-7 text-xs" type="submit" disabled={!renameValue.trim()}>
+                Rename
+              </Button>
+            </div>
+          </form>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function TemplatesPage({
   folderType,
+  typeFilter,
   onAddNew,
   onItemNavigate,
+  onSwitchToAllTab,
+  tree,
+  onRenameItem,
+  onDeleteItem,
 }: TemplatesPageProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const supportsGridView = folderType === "dashboards" || folderType === "recipes"
-  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
-  const [contentTab, setContentTab] = useState<"recents" | "all">("recents")
-
-  useEffect(() => {
-    setViewMode("table")
-    setContentTab("recents")
-  }, [folderType])
+  const [viewMode, setViewMode] = useLocalStorage<"grid" | "table">('view-mode-preference', 'table')
+  const effectiveViewMode = supportsGridView ? viewMode : "table"
 
   const debouncedSearch = useDebouncedValue(searchTerm, DEBOUNCE_DELAYS.SEARCH)
 
-  const breadcrumbs = getBreadcrumbs(folderType)
+  const breadcrumbs = getBreadcrumbs(folderType, tree)
   const ancestors = breadcrumbs.slice(0, -1)
   const folderTitle = breadcrumbs[breadcrumbs.length - 1]?.title ?? folderType
 
-  const navChildren = getNavChildren(folderType)
+  const navChildren = getNavChildren(folderType, tree)
 
   // Build display items: folders first, then files — all from the tree
   // For recipes: flatten children of category folders so individual recipes appear in the table
@@ -107,6 +264,7 @@ export function TemplatesPage({
           : "",
         tag: parentTitle || item.tag || (isFolder ? "Folder" : "File"),
         isFolder,
+        artifactType: item.artifactType,
         status: item.status,
         updated: item.updated || "",
         updatedBy: item.updatedBy || "",
@@ -127,54 +285,20 @@ export function TemplatesPage({
     }
 
     return [...folders, ...files]
-  }, [navChildren, folderType])
+  }, [navChildren])
 
   const isConnections = folderType === "connections"
   const isDashboards = folderType === "dashboards"
   const isChats = folderType === "chats"
-  const isRecipes = folderType === "recipes" || getAncestorIds(folderType).includes("recipes")
+  const isRecipes = folderType === "recipes" || getAncestorIds(folderType, tree).includes("recipes")
   const hideDescription = isDashboards || isRecipes
 
-  // Admin folders don't get tabs
-  const isAdmin = folderType === "admin"
-  const showTabs = !isAdmin
-
-  // Build flat list of all leaf items (for "Recents" tab) by walking the full tree
-  const allLeafItems = useMemo((): DisplayItem[] => {
-    if (!showTabs) return []
-    const leaves: DisplayItem[] = []
-    const walk = (items: typeof navChildren) => {
-      for (const item of items) {
-        if (item.type === "section" || item.type === "more") continue
-        if (item.type === "folder" && item.children?.length) {
-          walk(item.children)
-        } else if (item.type === "file") {
-          leaves.push({
-            id: item.id, title: item.title, tag: item.tag || "File", isFolder: false,
-            subtitle: "", status: item.status, updated: item.updated || "",
-            updatedBy: item.updatedBy || "", description: item.description,
-            relatedTo: item.relatedTo, relatedToTitle: item.relatedTo?.map(r => r.title).join(", ") ?? "",
-            account: item.account ?? "", sharedWith: item.sharedWith, sharedBy: item.sharedBy,
-            dataTable: item.dataTable,
-          })
-        }
-      }
-    }
-    walk(navChildren)
-    return leaves.sort((a, b) => (b.updated || "").localeCompare(a.updated || ""))
-  }, [navChildren, showTabs])
-
-  // Tab counts
-  const tabCounts = useMemo(() => ({
-    all: allItems.length,
-    recents: allLeafItems.length,
-  }), [allItems, allLeafItems])
-
-  // Pre-filter by content tab
-  const tabFilteredItems = useMemo(() => {
-    if (!showTabs || contentTab === "all") return allItems
-    return allLeafItems
-  }, [allItems, allLeafItems, showTabs, contentTab])
+  // Filter items based on active tab
+  const typeFilteredItems = useMemo(() => {
+    if (!typeFilter) return allItems // "All" tab: folders + files
+    // Type filter: items of this type + folders (folders always visible for navigation)
+    return allItems.filter(item => item.isFolder || item.artifactType === typeFilter)
+  }, [allItems, typeFilter])
 
   const FILTER_COLUMNS: FilterColumnConfig<DisplayItem>[] = useMemo(() => {
     const cols: FilterColumnConfig<DisplayItem>[] = [
@@ -226,7 +350,7 @@ export function TemplatesPage({
     activeFilters: columnFilters,
     hasActiveFilters,
   } = useFilterableData({
-    data: tabFilteredItems,
+    data: typeFilteredItems,
     columns: FILTER_COLUMNS,
     searchTerm: debouncedSearch,
     searchKeys: ["title", "tag", "description", "account", "relatedToTitle", "updatedBy", "dataTable"],
@@ -245,7 +369,8 @@ export function TemplatesPage({
     return result
   }, [searchTerm, columnFilters])
 
-  const defaultSort = folderType === "chats" ? { key: "updated", direction: "desc" as const } : undefined
+  // Default sort by recently updated — replaces the old "Recents" tab concept
+  const defaultSort = { key: "updated", direction: "desc" as const }
   const { sortedData, sortConfig, requestSort } = useSortableData(filteredData, defaultSort)
 
   const hasItems = allItems.length > 0
@@ -274,9 +399,9 @@ export function TemplatesPage({
             <h1 className="text-sm font-semibold text-foreground truncate">{folderTitle}</h1>
             {hasItems && (
               <span className="text-xs text-muted-foreground/70 ml-1.5 shrink-0 tabular-nums">
-                {filteredData.length !== tabFilteredItems.length
-                  ? `${filteredData.length} of ${tabFilteredItems.length}`
-                  : tabFilteredItems.length}
+                {filteredData.length !== typeFilteredItems.length
+                  ? `${filteredData.length} of ${typeFilteredItems.length}`
+                  : typeFilteredItems.length}
               </span>
             )}
           </nav>
@@ -312,12 +437,12 @@ export function TemplatesPage({
                   ]).map(({ mode, icon: Icon, label }) => (
                     <Button
                       key={mode}
-                      variant={viewMode === mode ? "secondary" : "ghost"}
+                      variant={effectiveViewMode === mode ? "secondary" : "ghost"}
                       size="sm"
                       onClick={() => setViewMode(mode)}
                       className="h-7 w-7 p-0"
                       aria-label={label}
-                      aria-pressed={viewMode === mode}
+                      aria-pressed={effectiveViewMode === mode}
                     >
                       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
@@ -340,45 +465,6 @@ export function TemplatesPage({
         </div>
       </div>
 
-      {/* -- Recents / All tabs (universal, except Admin) -------------------- */}
-      {showTabs && (
-        <div className="flex-shrink-0 border-b border-border bg-background px-6">
-          <div className="flex items-center gap-1 -mb-px">
-            {([
-              { key: "recents" as const, label: "Recents", count: tabCounts.recents, icon: Clock },
-              { key: "all" as const, label: "All", count: tabCounts.all, icon: FolderOpen },
-            ]).map(({ key, label, count, icon: TabIcon }) => (
-              <button
-                key={key}
-                onClick={() => setContentTab(key)}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium cursor-pointer",
-                  "transition-all duration-200 ease-out border-b-2",
-                  "active:scale-[0.97] active:transition-transform active:duration-75",
-                  contentTab === key
-                    ? "border-violet-600 text-violet-900 dark:border-violet-400 dark:text-violet-100"
-                    : "border-transparent text-muted-foreground/70 hover:text-foreground/80 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 hover:border-violet-200/60 dark:hover:border-violet-800/40"
-                )}
-              >
-                <TabIcon className={cn(
-                  "h-3.5 w-3.5 transition-colors duration-200",
-                  contentTab === key ? "text-violet-600 dark:text-violet-400" : ""
-                )} />
-                {label}
-                <span className={cn(
-                  "text-[11px] tabular-nums rounded-full px-1.5 py-0.5 min-w-[20px] text-center transition-all duration-200",
-                  contentTab === key
-                    ? "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
-                    : "bg-muted/80 text-muted-foreground/60"
-                )}>
-                  {count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* -- Active filter bar --------------------------------------------- */}
       <ActiveFilterBar
         filters={activeFilters}
@@ -397,7 +483,7 @@ export function TemplatesPage({
             transition={{ duration: 0.2 }}
           >
             {/* -- Grid view ------------------------------------------------ */}
-            {viewMode === "grid" && (
+            {effectiveViewMode === "grid" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
                 {sortedData.map((item, i) => (
                   <motion.div
@@ -433,7 +519,19 @@ export function TemplatesPage({
                         {item.isFolder && item.subtitle && (
                           <span className="text-[11px] text-muted-foreground shrink-0">{item.subtitle}</span>
                         )}
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
+                        {/* Action menu on hover, chevron otherwise */}
+                        <div className="shrink-0 relative flex items-center justify-center">
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:opacity-0 transition-opacity" />
+                          <div className="absolute inset-y-0 right-0 flex items-center">
+                            <ItemActionMenu
+                              item={item}
+                              tree={tree}
+                              onRenameItem={onRenameItem}
+                              onDeleteItem={onDeleteItem}
+                              triggerClassName="h-6 w-6"
+                            />
+                          </div>
+                        </div>
                       </div>
                       {/* Metadata row */}
                       <div className="flex items-center gap-2 pl-11">
@@ -472,7 +570,7 @@ export function TemplatesPage({
             )}
 
             {/* -- Table view ----------------------------------------------- */}
-            {viewMode === "table" && (
+            {effectiveViewMode === "table" && (
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 border-b border-border">
@@ -537,9 +635,7 @@ export function TemplatesPage({
                       onSort={requestSort}
                       className="w-[110px]"
                     />
-                    {isChats && (
-                      <th className="w-[44px]" />
-                    )}
+                    <th className="w-[44px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -643,20 +739,14 @@ export function TemplatesPage({
                       {/* Tertiary: By */}
                       <TableCell className="py-3 px-4 text-[13px] text-foreground/55">{item.updatedBy}</TableCell>
                       {/* Actions */}
-                      {isChats && (
-                        <TableCell className="py-3 px-2 w-[44px]">
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-0.5">
-                            <button
-                              onClick={(e) => { e.stopPropagation() }}
-                              className="p-1 rounded-md hover:bg-muted transition-colors cursor-pointer"
-                              title={item.status === "shared" ? "Manage sharing" : "Share chat"}
-                              aria-label={item.status === "shared" ? "Manage sharing" : "Share chat"}
-                            >
-                              <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
-                            </button>
-                          </div>
-                        </TableCell>
-                      )}
+                      <TableCell className="py-3 px-2 w-[44px]">
+                        <ItemActionMenu
+                          item={item}
+                          tree={tree}
+                          onRenameItem={onRenameItem}
+                          onDeleteItem={onDeleteItem}
+                        />
+                      </TableCell>
                     </motion.tr>
                   ))}
                 </TableBody>
@@ -665,8 +755,25 @@ export function TemplatesPage({
           </motion.div>
         )}
 
-        {/* No search results */}
-        {hasItems && filteredData.length === 0 && (
+        {/* Type filter empty state — type tab has no items in this folder */}
+        {hasItems && typeFilteredItems.length === 0 && typeFilter && (
+          <div className="py-20 text-center">
+            <p className="text-sm text-muted-foreground">
+              No {ARTIFACT_TYPE_LABELS[typeFilter]?.toLowerCase() ?? typeFilter} in this folder
+            </p>
+            {onSwitchToAllTab && (
+              <button
+                onClick={onSwitchToAllTab}
+                className="text-xs text-primary hover:text-primary/80 font-medium mt-2 transition-colors cursor-pointer"
+              >
+                View all items
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* No search/filter results */}
+        {hasItems && typeFilteredItems.length > 0 && filteredData.length === 0 && (
           <div className="py-20 text-center">
             <p className="text-sm text-muted-foreground">
               {searchTerm

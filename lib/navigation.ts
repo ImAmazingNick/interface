@@ -1,5 +1,6 @@
 import { TREE_NAVIGATION, CATEGORY_GROUPS, CATEGORY_TREES } from "@/constants"
-import type { CategoryGroup, TreeNavigationItem } from "@/types"
+import type { CategoryGroup, TreeNavigationItem, ArtifactType } from "@/types"
+import type { Session } from "@/types/sessions"
 
 export interface BreadcrumbItem {
   id: string
@@ -38,9 +39,10 @@ function findItem(itemId: string, items: readonly NavItem[]): NavItem | null {
   return null
 }
 
-export function getBreadcrumbs(itemId: string): BreadcrumbItem[] {
+export function getBreadcrumbs(itemId: string, tree?: NavItem[]): BreadcrumbItem[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const mainPath = findPath(itemId, TREE_NAVIGATION as unknown as NavItem[], [])
+  const mainPath = findPath(itemId, source, [])
   if (mainPath) return mainPath
   // Fall back to category trees
   for (const [categoryId, items] of Object.entries(CATEGORY_TREES)) {
@@ -50,9 +52,10 @@ export function getBreadcrumbs(itemId: string): BreadcrumbItem[] {
   return [{ id: itemId, title: itemId }]
 }
 
-export function getNavItem(itemId: string): NavItem | null {
+export function getNavItem(itemId: string, tree?: NavItem[]): NavItem | null {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const mainResult = findItem(itemId, TREE_NAVIGATION as unknown as NavItem[])
+  const mainResult = findItem(itemId, source)
   if (mainResult) return mainResult
   // Fall back to category trees
   for (const items of Object.values(CATEGORY_TREES)) {
@@ -62,12 +65,12 @@ export function getNavItem(itemId: string): NavItem | null {
   return null
 }
 
-export function getNavChildren(itemId: string): NavItem[] {
-  return getNavItem(itemId)?.children ?? []
+export function getNavChildren(itemId: string, tree?: NavItem[]): NavItem[] {
+  return getNavItem(itemId, tree)?.children ?? []
 }
 
-export function isNavFolder(itemId: string): boolean {
-  return getNavItem(itemId)?.type === "folder"
+export function isNavFolder(itemId: string, tree?: NavItem[]): boolean {
+  return getNavItem(itemId, tree)?.type === "folder"
 }
 
 export interface LeafDescendant {
@@ -98,16 +101,17 @@ function collectLeaves(items: readonly NavItem[], pathParts: string[]): LeafDesc
 }
 
 /** Recursively collects all leaf (non-folder) descendants of a folder, with path labels. */
-export function getLeafDescendants(itemId: string): LeafDescendant[] {
-  const item = getNavItem(itemId)
+export function getLeafDescendants(itemId: string, tree?: NavItem[]): LeafDescendant[] {
+  const item = getNavItem(itemId, tree)
   if (!item?.children) return []
   return collectLeaves(item.children, [])
 }
 
 /** Returns all ancestor folder IDs for a given item (from root to parent). */
-export function getAncestorIds(itemId: string): string[] {
+export function getAncestorIds(itemId: string, tree?: NavItem[]): string[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const path = findPath(itemId, TREE_NAVIGATION as unknown as NavItem[], [])
+  const path = findPath(itemId, source, [])
   if (path) return path.slice(0, -1).map((p) => p.id)
   // Fall back to category trees
   for (const items of Object.values(CATEGORY_TREES)) {
@@ -117,20 +121,21 @@ export function getAncestorIds(itemId: string): string[] {
   return []
 }
 
-/** Filter TREE_NAVIGATION to only items matching the given IDs. */
-export function getTreeItemsByIds(itemIds: string[]): NavItem[] {
+/** Filter tree to only items matching the given IDs. */
+export function getTreeItemsByIds(itemIds: string[], tree?: NavItem[]): NavItem[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   const idSet = new Set(itemIds)
-  return (TREE_NAVIGATION as unknown as NavItem[]).filter(item => idSet.has(item.id))
+  return source.filter(item => idSet.has(item.id))
 }
 
 /** Find which category group contains a given nav item (by direct membership or ancestry). */
-export function getCategoryForNavItem(navItemId: string): string | null {
+export function getCategoryForNavItem(navItemId: string, tree?: NavItem[]): string | null {
   // 1. Direct membership in navItemIds
   for (const group of CATEGORY_GROUPS) {
     if (group.navItemIds.includes(navItemId)) return group.id
   }
   // 2. Ancestor chain check
-  const ancestors = getAncestorIds(navItemId)
+  const ancestors = getAncestorIds(navItemId, tree)
   for (const group of CATEGORY_GROUPS) {
     for (const rootId of group.navItemIds) {
       if (ancestors.includes(rootId)) return group.id
@@ -141,4 +146,95 @@ export function getCategoryForNavItem(navItemId: string): string | null {
     if (findItem(navItemId, items as unknown as NavItem[])) return categoryId
   }
   return null
+}
+
+// ── Artifact type utilities ──────────────────────────────────────────────
+
+export const ARTIFACT_TYPE_LABELS: Record<string, string> = {
+  dashboard: "Dashboards",
+  report: "Reports",
+  connection: "Connections",
+  query: "Data Tables",
+  recipe: "Recipes",
+  chat: "Chats",
+  settings: "Admin",
+}
+
+/** Collect all leaf items recursively with their artifactType */
+function collectLeafItems(items: readonly NavItem[]): NavItem[] {
+  const result: NavItem[] = []
+  for (const item of items) {
+    if (SKIP_TYPES.has(item.type)) continue
+    if (item.type === "folder" && item.children) {
+      result.push(...collectLeafItems(item.children))
+    } else if (item.type === "file") {
+      result.push(item)
+    }
+  }
+  return result
+}
+
+export interface ArtifactTypeInfo {
+  type: string
+  label: string
+  count: number
+}
+
+/** Get distinct artifact types and counts for leaf items in a folder */
+export function getArtifactTypesInFolder(folderId: string, tree?: NavItem[]): ArtifactTypeInfo[] {
+  const folder = getNavItem(folderId, tree)
+  if (!folder?.children) return []
+  const leaves = collectLeafItems(folder.children)
+  const counts = new Map<string, number>()
+  for (const leaf of leaves) {
+    const t = leaf.artifactType ?? "generic"
+    counts.set(t, (counts.get(t) ?? 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => ({
+      type,
+      label: ARTIFACT_TYPE_LABELS[type] ?? type,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count)
+}
+
+/** Get all descendant item IDs for a folder (for session scoping) */
+export function getAllDescendantIds(folderId: string, tree?: NavItem[]): Set<string> {
+  const folder = getNavItem(folderId, tree)
+  if (!folder?.children) return new Set()
+  const ids = new Set<string>()
+  const walk = (items: readonly NavItem[]) => {
+    for (const item of items) {
+      ids.add(item.id)
+      if (item.children) walk(item.children)
+    }
+  }
+  walk(folder.children)
+  return ids
+}
+
+/** Filter sessions to those related to items in the current scope */
+export function getSessionsInScope(sessions: Session[], activeNavItem: string, tree?: NavItem[]): Session[] {
+  const folder = getNavItem(activeNavItem, tree)
+
+  // Folder scope: filter to sessions related to any descendant
+  if (folder?.type === "folder") {
+    const descendantIds = getAllDescendantIds(activeNavItem, tree)
+    return sessions.filter(s =>
+      s.relatedItems.some(ri => descendantIds.has(ri.id)) ||
+      s.relatedArtifacts.some(id => descendantIds.has(id))
+    )
+  }
+
+  // Item scope: filter to sessions related to this specific item
+  if (folder?.type === "file") {
+    return sessions.filter(s =>
+      s.relatedItems.some(ri => ri.id === activeNavItem) ||
+      s.relatedArtifacts.includes(activeNavItem)
+    )
+  }
+
+  // No scope (welcome, AI agent, etc.): return all sessions
+  return sessions
 }

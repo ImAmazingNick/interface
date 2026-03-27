@@ -35,6 +35,7 @@ interface ItemPageProps {
   title: string
   itemId?: string
   onBreadcrumbClick?: (id: string) => void
+  tree?: import("@/types").TreeNavigationItem[]
 }
 
 // ── Content type detection ──────────────────────────────────────────────
@@ -500,8 +501,8 @@ function PropertiesPanel({ itemId }: { itemId?: string }) {
 
 // ── Main component ──────────────────────────────────────────────────────
 
-export function ItemPage({ title, itemId, onBreadcrumbClick }: ItemPageProps) {
-  const breadcrumbs = itemId ? getBreadcrumbs(itemId) : []
+export function ItemPage({ title, itemId, onBreadcrumbClick, tree }: ItemPageProps) {
+  const breadcrumbs = itemId ? getBreadcrumbs(itemId, tree) : []
   const ancestors = breadcrumbs.slice(0, -1)
   const current = breadcrumbs[breadcrumbs.length - 1]
   const displayTitle = current?.title ?? title

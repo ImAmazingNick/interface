@@ -14,11 +14,14 @@ export interface NavigationItem {
   href?: string
 }
 
+export type ArtifactType = 'dashboard' | 'report' | 'connection' | 'query' | 'recipe' | 'chat' | 'settings'
+
 export interface TreeNavigationItem {
   id: string
   title: string
   icon: React.ComponentType<{ className?: string }>
   type: 'folder' | 'file' | 'section' | 'search' | 'more'
+  artifactType?: ArtifactType
   children?: TreeNavigationItem[]
   expanded?: boolean
   href?: string
@@ -120,6 +123,12 @@ export interface MainNavigationProps {
   onPlusClick?: (id: string) => void
   sidebarWidth?: number
   onWidthChange?: (width: number) => void
+  tree?: TreeNavigationItem[]
+  onCreateFolder?: (parentId: string, title: string) => string
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
+  onRestoreDeletedItem?: () => void
+  getDeletedItem?: () => { item: TreeNavigationItem; parentId: string | null; index: number } | null
 }
 
 export interface CategoryGroup {
