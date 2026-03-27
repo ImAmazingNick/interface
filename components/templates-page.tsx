@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState, useMemo } from "react"
+import { Fragment, useState, useMemo, useEffect, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import {
   Table,
@@ -10,11 +10,20 @@ import {
   TableHeader,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Grid3X3, Table as TableIcon, Plus, FolderOpen, FileText, ChevronRight, Share2, MoreHorizontal } from "lucide-react"
+import { Grid3X3, Table as TableIcon, Plus, FolderOpen, FileText, ChevronRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { getBreadcrumbs, getNavChildren, getAncestorIds, ARTIFACT_TYPE_LABELS } from "@/lib/navigation"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { getBreadcrumbs, getNavChildren, getAncestorIds, getAllDescendantIds, ARTIFACT_TYPE_LABELS } from "@/lib/navigation"
 import { getStatusBadgeClass, getStatusLabel } from "@/lib/status-utils"
 import type { ItemStatus } from "@/lib/status-utils"
 import { useLocalStorage } from "@/hooks/use-local-storage"
@@ -36,6 +45,9 @@ interface TemplatesPageProps {
   onAddNew?: (folderType: string) => void
   onItemNavigate?: (itemId: string) => void
   onSwitchToAllTab?: () => void
+  tree?: import("@/types").TreeNavigationItem[]
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
 }
 
 const ADD_BUTTON_LABELS: Record<string, string> = {
@@ -67,12 +79,156 @@ interface DisplayItem {
   dataTable?: string
 }
 
+/** Shared action menu for table rows and grid cards — Rename / Delete with confirmation popovers */
+function ItemActionMenu({
+  item,
+  tree,
+  onRenameItem,
+  onDeleteItem,
+  triggerClassName,
+}: {
+  item: DisplayItem
+  tree?: import("@/types").TreeNavigationItem[]
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
+  triggerClassName?: string
+}) {
+  const [action, setAction] = useState<"rename" | "delete" | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (action === "rename") {
+      setTimeout(() => inputRef.current?.select(), 0)
+    }
+  }, [action])
+
+  return (
+    <Popover
+      open={action !== null}
+      onOpenChange={(open) => { if (!open) setAction(null) }}
+    >
+      <PopoverAnchor asChild>
+        <div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className={cn(
+                  "inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer",
+                  triggerClassName ?? "h-8 w-8"
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setRenameValue(item.title)
+                  setAction("rename")
+                }}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-red-600"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setAction("delete")
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        className="w-64"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {action === "delete" && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">Delete {item.isFolder ? "folder" : "item"}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                This will permanently delete &ldquo;{item.title}&rdquo;
+                {item.isFolder && tree && (() => {
+                  const count = getAllDescendantIds(item.id, tree).size
+                  return count > 0 ? <> and all {count} items inside it</> : null
+                })()}.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAction(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  onDeleteItem?.(item.id)
+                  setAction(null)
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        )}
+        {action === "rename" && (
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (renameValue.trim()) {
+                onRenameItem?.(item.id, renameValue.trim())
+                setAction(null)
+              }
+            }}
+          >
+            <div>
+              <p className="text-sm font-medium mb-2">Rename {item.isFolder ? "folder" : "item"}</p>
+              <Input
+                ref={inputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Item name"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" type="button" onClick={() => setAction(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="h-7 text-xs" type="submit" disabled={!renameValue.trim()}>
+                Rename
+              </Button>
+            </div>
+          </form>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function TemplatesPage({
   folderType,
   typeFilter,
   onAddNew,
   onItemNavigate,
   onSwitchToAllTab,
+  tree,
+  onRenameItem,
+  onDeleteItem,
 }: TemplatesPageProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const supportsGridView = folderType === "dashboards" || folderType === "recipes"
@@ -81,11 +237,11 @@ export function TemplatesPage({
 
   const debouncedSearch = useDebouncedValue(searchTerm, DEBOUNCE_DELAYS.SEARCH)
 
-  const breadcrumbs = getBreadcrumbs(folderType)
+  const breadcrumbs = getBreadcrumbs(folderType, tree)
   const ancestors = breadcrumbs.slice(0, -1)
   const folderTitle = breadcrumbs[breadcrumbs.length - 1]?.title ?? folderType
 
-  const navChildren = getNavChildren(folderType)
+  const navChildren = getNavChildren(folderType, tree)
 
   // Build display items: folders first, then files — all from the tree
   // For recipes: flatten children of category folders so individual recipes appear in the table
@@ -129,12 +285,12 @@ export function TemplatesPage({
     }
 
     return [...folders, ...files]
-  }, [navChildren, folderType])
+  }, [navChildren])
 
   const isConnections = folderType === "connections"
   const isDashboards = folderType === "dashboards"
   const isChats = folderType === "chats"
-  const isRecipes = folderType === "recipes" || getAncestorIds(folderType).includes("recipes")
+  const isRecipes = folderType === "recipes" || getAncestorIds(folderType, tree).includes("recipes")
   const hideDescription = isDashboards || isRecipes
 
   // Filter items based on active tab
@@ -363,7 +519,19 @@ export function TemplatesPage({
                         {item.isFolder && item.subtitle && (
                           <span className="text-[11px] text-muted-foreground shrink-0">{item.subtitle}</span>
                         )}
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
+                        {/* Action menu on hover, chevron otherwise */}
+                        <div className="shrink-0 relative flex items-center justify-center">
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:opacity-0 transition-opacity" />
+                          <div className="absolute inset-y-0 right-0 flex items-center">
+                            <ItemActionMenu
+                              item={item}
+                              tree={tree}
+                              onRenameItem={onRenameItem}
+                              onDeleteItem={onDeleteItem}
+                              triggerClassName="h-6 w-6"
+                            />
+                          </div>
+                        </div>
                       </div>
                       {/* Metadata row */}
                       <div className="flex items-center gap-2 pl-11">
@@ -467,9 +635,7 @@ export function TemplatesPage({
                       onSort={requestSort}
                       className="w-[110px]"
                     />
-                    {isChats && (
-                      <th className="w-[44px]" />
-                    )}
+                    <th className="w-[44px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -573,20 +739,14 @@ export function TemplatesPage({
                       {/* Tertiary: By */}
                       <TableCell className="py-3 px-4 text-[13px] text-foreground/55">{item.updatedBy}</TableCell>
                       {/* Actions */}
-                      {isChats && (
-                        <TableCell className="py-3 px-2 w-[44px]">
-                          <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 flex items-center gap-0.5">
-                            <button
-                              onClick={(e) => { e.stopPropagation() }}
-                              className="p-1 rounded-md hover:bg-muted transition-colors cursor-pointer"
-                              title={item.status === "shared" ? "Manage sharing" : "Share chat"}
-                              aria-label={item.status === "shared" ? "Manage sharing" : "Share chat"}
-                            >
-                              <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
-                            </button>
-                          </div>
-                        </TableCell>
-                      )}
+                      <TableCell className="py-3 px-2 w-[44px]">
+                        <ItemActionMenu
+                          item={item}
+                          tree={tree}
+                          onRenameItem={onRenameItem}
+                          onDeleteItem={onDeleteItem}
+                        />
+                      </TableCell>
                     </motion.tr>
                   ))}
                 </TableBody>

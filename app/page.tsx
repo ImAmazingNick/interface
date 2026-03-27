@@ -24,7 +24,8 @@ import { SessionPropertiesPanel } from "@/components/sessions/session-properties
 import { useSessionState } from "@/hooks/use-session-state"
 import { STEP_IDS } from "@/constants"
 import { cn } from "@/lib/utils"
-import { isNavFolder, getNavItem, getNavChildren, getAncestorIds, getArtifactTypesInFolder, getSessionsInScope } from "@/lib/navigation"
+import { isNavFolder, getNavItem, getNavChildren, getAncestorIds, getAllDescendantIds, getArtifactTypesInFolder, getSessionsInScope } from "@/lib/navigation"
+import { useNavigationTree } from "@/hooks/use-navigation-tree"
 import type { TabConfig } from "@/components/center-view-tabs"
 import { LayoutGrid, MessageSquare } from "lucide-react"
 import type { Step, ArtifactPanelContent } from "@/types"
@@ -37,6 +38,15 @@ export default function Home() {
   const [navMode, setNavMode] = useLocalStorage<'tree' | 'category'>('nav-mode', 'tree')
   const [centerTab, setCenterTab] = useLocalStorage<string>('center-tab', 'all')
   const [folderTabStates, setFolderTabStates] = useLocalStorage<Record<string, string>>('folder-tab-states', {})
+  const {
+    tree: navTree,
+    createFolder,
+    renameItem,
+    deleteItem,
+    getDeletedItem,
+    restoreDeletedItem,
+  } = useNavigationTree()
+
   const {
     sessions,
     activeSessionId,
@@ -65,8 +75,8 @@ export default function Home() {
 
   // Sessions scoped to the currently selected nav item
   const scopedSessions = useMemo(
-    () => getSessionsInScope(sessions, activeNavItem),
-    [sessions, activeNavItem],
+    () => getSessionsInScope(sessions, activeNavItem, navTree),
+    [sessions, activeNavItem, navTree],
   )
 
   const handleSidebarWidthChange = useCallback((width: number) => {
@@ -103,9 +113,9 @@ export default function Home() {
   const handleNavItemSelect = (itemId: string) => {
     // "Show all" items navigate to their parent folder instead
     let targetId = itemId
-    const navItem = getNavItem(itemId)
+    const navItem = getNavItem(itemId, navTree)
     if (navItem?.type === "more") {
-      const ancestors = getAncestorIds(itemId)
+      const ancestors = getAncestorIds(itemId, navTree)
       const parentId = ancestors[ancestors.length - 1]
       if (parentId) targetId = parentId
     }
@@ -114,8 +124,8 @@ export default function Home() {
     setActiveNavItem(targetId)
 
     // Always show content (not sessions) when navigating via sidebar
-    if (isNavFolder(targetId)) {
-      const types = getArtifactTypesInFolder(targetId)
+    if (isNavFolder(targetId, navTree)) {
+      const types = getArtifactTypesInFolder(targetId, navTree)
       const validKeys = new Set(["all", "sessions", ...types.map((t) => t.type)])
       // Restore per-folder tab state if available
       const savedTab = folderTabStates[targetId]
@@ -145,7 +155,7 @@ export default function Home() {
     }
 
     // Expand navigation when going to folder navigation
-    if (isNavFolder(itemId)) {
+    if (isNavFolder(itemId, navTree)) {
       setIsNavCollapsed(false)
     }
   }
@@ -272,6 +282,22 @@ export default function Home() {
     setIsNavCollapsed(true)
   }, [])
 
+  // Centralized delete handler — removes item and navigates if the active item was deleted
+  const handleDeleteItem = useCallback((itemId: string) => {
+    // Calculate navigation target before deleting
+    const ancestors = getAncestorIds(itemId, navTree)
+    const parentId = ancestors[ancestors.length - 1]
+
+    // Check if active item is the deleted item or a descendant
+    const needsNavigate = activeNavItem === itemId || getAllDescendantIds(itemId, navTree).has(activeNavItem)
+
+    deleteItem(itemId)
+
+    if (needsNavigate) {
+      setActiveNavItem(parentId || "ai-agent")
+    }
+  }, [deleteItem, activeNavItem, navTree])
+
   const handleExitConversionsDashboard = useCallback(() => {
     setShowConversionsDashboard(false)
     setActiveNavItem("dashboards")
@@ -358,29 +384,33 @@ export default function Home() {
     }
 
     // Show folder page for any folder in the nav tree
-    if (isNavFolder(activeNavItem)) {
+    if (isNavFolder(activeNavItem, navTree)) {
       return <TemplatesPage
         folderType={activeNavItem}
         typeFilter={activeTypeFilter}
         onAddNew={handlePlusClick}
         onItemNavigate={handleNavItemSelect}
         onSwitchToAllTab={() => setCenterTab("all")}
+        tree={navTree}
+        onRenameItem={renameItem}
+        onDeleteItem={handleDeleteItem}
       />
     }
 
     // Chat items → render chat interface with artifact support
-    const ancestors = getAncestorIds(activeNavItem)
+    const ancestors = getAncestorIds(activeNavItem, navTree)
     if (ancestors.includes("chats")) {
       return <WelcomePage6Cards onArtifactGenerated={handleOpenArtifactPanel} />
     }
 
     // For leaf items and "more" items, show the item detail page
-    const navItem = getNavItem(activeNavItem)
+    const navItem = getNavItem(activeNavItem, navTree)
     if (navItem) {
       return <ItemPage
         title={navItem.title}
         itemId={activeNavItem}
         onBreadcrumbClick={handleNavItemSelect}
+        tree={navTree}
       />
     }
 
@@ -392,7 +422,7 @@ export default function Home() {
   const resizeHandleLine = "absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/25 transition-colors duration-150"
 
   const sessionListProps = useMemo(() => {
-    const navItem = getNavItem(activeNavItem)
+    const navItem = getNavItem(activeNavItem, navTree)
     return {
       sessions: scopedSessions,
       activeSessionId: activeSessionId ?? undefined,
@@ -406,7 +436,7 @@ export default function Home() {
       totalSessionCount: sessions.length,
       onShowAllSessions: () => handleNavItemSelect("ai-agent"),
     }
-  }, [scopedSessions, sessions.length, activeSessionId, activeNavItem, handleSelectSession, handleCreateSession, handleDeleteSession, handleDuplicateSession, handleRenameSession, handleNavItemSelect])
+  }, [scopedSessions, sessions.length, activeSessionId, activeNavItem, navTree, handleSelectSession, handleCreateSession, handleDeleteSession, handleDuplicateSession, handleRenameSession, handleNavItemSelect])
 
   const compactSessionListProps = useMemo(() => ({
     ...sessionListProps,
@@ -497,7 +527,7 @@ export default function Home() {
   const handleCenterTabChange = useCallback((tab: string) => {
     setCenterTab(tab)
     // Persist tab selection per folder
-    if (isNavFolder(activeNavItem)) {
+    if (isNavFolder(activeNavItem, navTree)) {
       setFolderTabStates(prev => {
         const next = { ...prev, [activeNavItem]: tab }
         // LRU eviction: keep at most 50 entries
@@ -519,11 +549,11 @@ export default function Home() {
   const availableTabs = useMemo((): TabConfig[] => {
     if (!showTabs) return []
 
-    const isFolder = isNavFolder(activeNavItem)
+    const isFolder = isNavFolder(activeNavItem, navTree)
 
     if (isFolder) {
-      const types = getArtifactTypesInFolder(activeNavItem)
-      const children = getNavChildren(activeNavItem).filter(c => c.type !== "section" && c.type !== "more")
+      const types = getArtifactTypesInFolder(activeNavItem, navTree)
+      const children = getNavChildren(activeNavItem, navTree).filter(c => c.type !== "section" && c.type !== "more")
 
       const contentTabs: TabConfig[] = [
         { key: "all", label: "All", count: children.length },
@@ -540,7 +570,7 @@ export default function Home() {
 
     // Item or welcome — no tabs
     return []
-  }, [activeNavItem, scopedSessions.length, showTabs])
+  }, [activeNavItem, navTree, scopedSessions.length, showTabs])
 
   // Ensure the active tab is valid for the current context
   useEffect(() => {
@@ -569,6 +599,12 @@ export default function Home() {
             onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)}
             sidebarWidth={sidebarWidth}
             onWidthChange={handleSidebarWidthChange}
+            tree={navTree}
+            onCreateFolder={createFolder}
+            onRenameItem={renameItem}
+            onDeleteItem={handleDeleteItem}
+            onRestoreDeletedItem={restoreDeletedItem}
+            getDeletedItem={getDeletedItem}
           />
         ) : (
           <CategoryNavigation

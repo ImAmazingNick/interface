@@ -39,9 +39,10 @@ function findItem(itemId: string, items: readonly NavItem[]): NavItem | null {
   return null
 }
 
-export function getBreadcrumbs(itemId: string): BreadcrumbItem[] {
+export function getBreadcrumbs(itemId: string, tree?: NavItem[]): BreadcrumbItem[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const mainPath = findPath(itemId, TREE_NAVIGATION as unknown as NavItem[], [])
+  const mainPath = findPath(itemId, source, [])
   if (mainPath) return mainPath
   // Fall back to category trees
   for (const [categoryId, items] of Object.entries(CATEGORY_TREES)) {
@@ -51,9 +52,10 @@ export function getBreadcrumbs(itemId: string): BreadcrumbItem[] {
   return [{ id: itemId, title: itemId }]
 }
 
-export function getNavItem(itemId: string): NavItem | null {
+export function getNavItem(itemId: string, tree?: NavItem[]): NavItem | null {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const mainResult = findItem(itemId, TREE_NAVIGATION as unknown as NavItem[])
+  const mainResult = findItem(itemId, source)
   if (mainResult) return mainResult
   // Fall back to category trees
   for (const items of Object.values(CATEGORY_TREES)) {
@@ -63,12 +65,12 @@ export function getNavItem(itemId: string): NavItem | null {
   return null
 }
 
-export function getNavChildren(itemId: string): NavItem[] {
-  return getNavItem(itemId)?.children ?? []
+export function getNavChildren(itemId: string, tree?: NavItem[]): NavItem[] {
+  return getNavItem(itemId, tree)?.children ?? []
 }
 
-export function isNavFolder(itemId: string): boolean {
-  return getNavItem(itemId)?.type === "folder"
+export function isNavFolder(itemId: string, tree?: NavItem[]): boolean {
+  return getNavItem(itemId, tree)?.type === "folder"
 }
 
 export interface LeafDescendant {
@@ -99,16 +101,17 @@ function collectLeaves(items: readonly NavItem[], pathParts: string[]): LeafDesc
 }
 
 /** Recursively collects all leaf (non-folder) descendants of a folder, with path labels. */
-export function getLeafDescendants(itemId: string): LeafDescendant[] {
-  const item = getNavItem(itemId)
+export function getLeafDescendants(itemId: string, tree?: NavItem[]): LeafDescendant[] {
+  const item = getNavItem(itemId, tree)
   if (!item?.children) return []
   return collectLeaves(item.children, [])
 }
 
 /** Returns all ancestor folder IDs for a given item (from root to parent). */
-export function getAncestorIds(itemId: string): string[] {
+export function getAncestorIds(itemId: string, tree?: NavItem[]): string[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   // Search main tree first
-  const path = findPath(itemId, TREE_NAVIGATION as unknown as NavItem[], [])
+  const path = findPath(itemId, source, [])
   if (path) return path.slice(0, -1).map((p) => p.id)
   // Fall back to category trees
   for (const items of Object.values(CATEGORY_TREES)) {
@@ -118,20 +121,21 @@ export function getAncestorIds(itemId: string): string[] {
   return []
 }
 
-/** Filter TREE_NAVIGATION to only items matching the given IDs. */
-export function getTreeItemsByIds(itemIds: string[]): NavItem[] {
+/** Filter tree to only items matching the given IDs. */
+export function getTreeItemsByIds(itemIds: string[], tree?: NavItem[]): NavItem[] {
+  const source = tree ?? (TREE_NAVIGATION as unknown as NavItem[])
   const idSet = new Set(itemIds)
-  return (TREE_NAVIGATION as unknown as NavItem[]).filter(item => idSet.has(item.id))
+  return source.filter(item => idSet.has(item.id))
 }
 
 /** Find which category group contains a given nav item (by direct membership or ancestry). */
-export function getCategoryForNavItem(navItemId: string): string | null {
+export function getCategoryForNavItem(navItemId: string, tree?: NavItem[]): string | null {
   // 1. Direct membership in navItemIds
   for (const group of CATEGORY_GROUPS) {
     if (group.navItemIds.includes(navItemId)) return group.id
   }
   // 2. Ancestor chain check
-  const ancestors = getAncestorIds(navItemId)
+  const ancestors = getAncestorIds(navItemId, tree)
   for (const group of CATEGORY_GROUPS) {
     for (const rootId of group.navItemIds) {
       if (ancestors.includes(rootId)) return group.id
@@ -177,8 +181,8 @@ export interface ArtifactTypeInfo {
 }
 
 /** Get distinct artifact types and counts for leaf items in a folder */
-export function getArtifactTypesInFolder(folderId: string): ArtifactTypeInfo[] {
-  const folder = getNavItem(folderId)
+export function getArtifactTypesInFolder(folderId: string, tree?: NavItem[]): ArtifactTypeInfo[] {
+  const folder = getNavItem(folderId, tree)
   if (!folder?.children) return []
   const leaves = collectLeafItems(folder.children)
   const counts = new Map<string, number>()
@@ -196,8 +200,8 @@ export function getArtifactTypesInFolder(folderId: string): ArtifactTypeInfo[] {
 }
 
 /** Get all descendant item IDs for a folder (for session scoping) */
-export function getAllDescendantIds(folderId: string): Set<string> {
-  const folder = getNavItem(folderId)
+export function getAllDescendantIds(folderId: string, tree?: NavItem[]): Set<string> {
+  const folder = getNavItem(folderId, tree)
   if (!folder?.children) return new Set()
   const ids = new Set<string>()
   const walk = (items: readonly NavItem[]) => {
@@ -211,12 +215,12 @@ export function getAllDescendantIds(folderId: string): Set<string> {
 }
 
 /** Filter sessions to those related to items in the current scope */
-export function getSessionsInScope(sessions: Session[], activeNavItem: string): Session[] {
-  const folder = getNavItem(activeNavItem)
+export function getSessionsInScope(sessions: Session[], activeNavItem: string, tree?: NavItem[]): Session[] {
+  const folder = getNavItem(activeNavItem, tree)
 
   // Folder scope: filter to sessions related to any descendant
   if (folder?.type === "folder") {
-    const descendantIds = getAllDescendantIds(activeNavItem)
+    const descendantIds = getAllDescendantIds(activeNavItem, tree)
     return sessions.filter(s =>
       s.relatedItems.some(ri => descendantIds.has(ri.id)) ||
       s.relatedArtifacts.some(id => descendantIds.has(id))

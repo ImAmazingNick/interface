@@ -13,10 +13,20 @@ import {
 } from "@/components/ui/select"
 import { TREE_NAVIGATION, WORKSPACES } from "@/constants"
 import { useLocalStorage } from "@/hooks/use-local-storage"
-import type { MainNavigationProps } from "@/types"
-import { GripVertical, ChevronDown, ChevronRight, FolderOpen, Folder, File, FileText, Plus, Search, X, Lock, Users2, Building2, Settings, Users, Bot, Bell, User, LogOut } from "lucide-react"
+import type { MainNavigationProps, TreeNavigationItem as TreeNavItemType } from "@/types"
+import { ChevronDown, ChevronRight, FolderOpen, Folder, FolderPlus, Plus, Search, X, Lock, Users2, Settings, Users, Bot, Bell, User, LogOut } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
+import { TreeContextMenu } from "@/components/tree-context-menu"
+import { InlineTreeInput } from "@/components/inline-tree-input"
+import { getAllDescendantIds, getNavItem as getNavItemUtil } from "@/lib/navigation"
 
 const NavigationItem = memo(function NavigationItem({
   item,
@@ -141,6 +151,55 @@ const HighlightedText = memo(function HighlightedText({ text, query }: { text: s
   )
 })
 
+/** Inline rename input — replaces the title text in-place */
+function InlineRenameInput({
+  defaultValue,
+  onConfirm,
+  onCancel,
+}: {
+  defaultValue: string
+  onConfirm: (value: string) => void
+  onCancel: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [value, setValue] = useState(defaultValue)
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+  }, [])
+
+  const handleConfirm = useCallback(() => {
+    const trimmed = value.trim()
+    if (trimmed.length >= 2 && trimmed.length <= 50) {
+      onConfirm(trimmed)
+    } else {
+      onCancel()
+    }
+  }, [value, onConfirm, onCancel])
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === "Enter") { e.preventDefault(); handleConfirm() }
+        else if (e.key === "Escape") { e.preventDefault(); onCancel() }
+      }}
+      onBlur={handleConfirm}
+      onClick={(e) => e.stopPropagation()}
+      maxLength={50}
+      className="flex-1 min-w-0 text-sm bg-transparent border rounded px-1 py-0 outline-none border-orange-500 ring-1 ring-orange-500/30"
+      aria-label="Rename"
+    />
+  )
+}
+
 const TreeNavigationItem = memo(function TreeNavigationItem({
   item,
   level = 0,
@@ -151,6 +210,19 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
   isCollapsed,
   currentActiveItem,
   searchQuery = "",
+  editingItemId,
+  creatingInFolderId,
+  deleteTargetId,
+  onStartRename,
+  onConfirmRename,
+  onCancelRename,
+  onStartCreate,
+  onConfirmCreate,
+  onCancelCreate,
+  onStartDelete,
+  onConfirmDelete,
+  onCancelDelete,
+  tree,
 }: {
   item: any
   level?: number
@@ -161,6 +233,19 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
   isCollapsed: boolean
   currentActiveItem?: string
   searchQuery?: string
+  editingItemId?: string | null
+  creatingInFolderId?: string | null
+  deleteTargetId?: string | null
+  onStartRename?: (itemId: string) => void
+  onConfirmRename?: (itemId: string, newTitle: string) => void
+  onCancelRename?: () => void
+  onStartCreate?: (parentId: string) => void
+  onConfirmCreate?: (parentId: string, title: string) => void
+  onCancelCreate?: () => void
+  onStartDelete?: (itemId: string) => void
+  onConfirmDelete?: (itemId: string) => void
+  onCancelDelete?: () => void
+  tree?: TreeNavItemType[]
 }) {
   const Icon = item.icon
   const isFolder = item.type === 'folder'
@@ -272,8 +357,8 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
           </div>
         )}
 
-        {/* + Icon on hover for folders - positioned on the right side in collapsed view */}
-        {isFolder && hasChildren && (
+        {/* + Icon on hover for folders in collapsed view — triggers workflow directly */}
+        {isFolder && (
           <span
             role="button"
             tabIndex={0}
@@ -320,6 +405,12 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
   }
 
   return (
+    <TreeContextMenu
+      item={item}
+      onCreateFolder={(parentId) => onStartCreate?.(parentId)}
+      onRename={(itemId) => onStartRename?.(itemId)}
+      onDelete={(itemId) => onStartDelete?.(itemId)}
+    >
     <div>
       <Button
         variant="ghost"
@@ -390,10 +481,18 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
             </div>
           )}
 
-          {/* Title */}
-          <span className="truncate text-sm">
-            <HighlightedText text={item.title} query={searchQuery} />
-          </span>
+          {/* Title — inline rename or display */}
+          {editingItemId === item.id ? (
+            <InlineRenameInput
+              defaultValue={item.title}
+              onConfirm={(newTitle) => onConfirmRename?.(item.id, newTitle)}
+              onCancel={() => onCancelRename?.()}
+            />
+          ) : (
+            <span className="truncate text-sm">
+              <HighlightedText text={item.title} query={searchQuery} />
+            </span>
+          )}
 
           {/* Private/Shared indicator */}
           {item.status === "private" && (
@@ -408,26 +507,92 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
             </span>
           )}
 
-          {/* + Icon on hover for folders - positioned on the right side */}
-          {isFolder && hasChildren && (
-            <span
-              role="button"
-              tabIndex={0}
-              className="absolute -right-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 focus-visible:scale-100 cursor-pointer"
-              onClick={handlePlusClick}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePlusClick(e as unknown as React.MouseEvent); } }}
-              aria-label={`Add new item to ${item.title}`}
-            >
-              <Plus className="h-7 w-7 text-orange-500 hover:text-orange-400" aria-hidden="true" />
-            </span>
+          {/* + Dropdown on hover for folders — New Folder + artifact creation */}
+          {isFolder && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="absolute -right-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 focus-visible:scale-100 cursor-pointer"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Add new item to ${item.title}`}
+                >
+                  <Plus className="h-7 w-7 text-orange-500 hover:text-orange-400" aria-hidden="true" />
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={4}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onStartCreate?.(item.id) }}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  New Folder
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPlusClick?.(item.id) }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Item...
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </Button>
 
+      {/* Delete confirmation popover — anchored to the button row above */}
+      <Popover open={deleteTargetId === item.id} onOpenChange={(open) => { if (!open) onCancelDelete?.() }}>
+        <PopoverTrigger asChild>
+          {/* Invisible anchor positioned after the Button to give the popover a reference point */}
+          <span className="block h-0 w-full" aria-hidden />
+        </PopoverTrigger>
+        {deleteTargetId === item.id && (
+          <PopoverContent
+            align="start"
+            side="right"
+            className="w-64"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Delete {isFolder ? "folder" : "item"}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This will permanently delete &ldquo;{item.title}&rdquo;
+                  {isFolder && item.children && item.children.length > 0 && (
+                    <> and all {(() => {
+                      const count = tree ? getAllDescendantIds(item.id, tree).size : item.children.length
+                      return count
+                    })()} items inside it</>
+                  )}.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onCancelDelete?.()}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => onConfirmDelete?.(item.id)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        )}
+      </Popover>
+
       {/* Children */}
-      {isFolder && hasChildren && item.expanded && (
+      {isFolder && item.expanded && (
         <div className="ml-1 border-l border-sidebar-border/50">
-          {item.children.map((child: any) => (
+          {/* Inline create input — appears at the top of children */}
+          {creatingInFolderId === item.id && !isCollapsed && (
+            <InlineTreeInput
+              level={level + 1}
+              onConfirm={(title) => onConfirmCreate?.(item.id, title)}
+              onCancel={() => onCancelCreate?.()}
+            />
+          )}
+          {item.children?.map((child: any) => (
             <TreeNavigationItem
               key={child.id}
               item={child}
@@ -439,11 +604,25 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
               isCollapsed={isCollapsed}
               currentActiveItem={currentActiveItem}
               searchQuery={searchQuery}
+              editingItemId={editingItemId}
+              creatingInFolderId={creatingInFolderId}
+              deleteTargetId={deleteTargetId}
+              onStartRename={onStartRename}
+              onConfirmRename={onConfirmRename}
+              onCancelRename={onCancelRename}
+              onStartCreate={onStartCreate}
+              onConfirmCreate={onConfirmCreate}
+              onCancelCreate={onCancelCreate}
+              onStartDelete={onStartDelete}
+              onConfirmDelete={onConfirmDelete}
+              onCancelDelete={onCancelDelete}
+              tree={tree}
             />
           ))}
         </div>
       )}
     </div>
+    </TreeContextMenu>
   )
 })
 
@@ -535,11 +714,19 @@ export const MainNavigation = memo(function MainNavigation({
   onToggleCollapse,
   sidebarWidth = 256,
   onWidthChange,
-}: MainNavigationProps & { onPlusClick?: (id: string) => void }) {
+  tree: treeProp,
+  onCreateFolder,
+  onRenameItem,
+  onDeleteItem,
+  onRestoreDeletedItem,
+  getDeletedItem,
+}: MainNavigationProps) {
   // Persist expanded folder IDs across sessions
   const [expandedIds, setExpandedIds] = useLocalStorage<string[]>('nav-expanded-folders', DEFAULT_EXPANDED_IDS)
 
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds])
+
+  const treeSource = treeProp ?? (TREE_NAVIGATION as unknown as any[])
 
   const treeItems = useMemo(() => {
     const applyExpanded = (items: readonly any[]): any[] =>
@@ -548,30 +735,153 @@ export const MainNavigation = memo(function MainNavigation({
         expanded: expandedSet.has(item.id),
         ...(item.children ? { children: applyExpanded(item.children) } : {}),
       }))
-    return applyExpanded(TREE_NAVIGATION as unknown as any[])
-  }, [expandedSet])
+    return applyExpanded(treeSource as unknown as any[])
+  }, [expandedSet, treeSource])
+
+  // CRUD state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [creatingInFolderId, setCreatingInFolderId] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+
+  const handleStartRename = useCallback((itemId: string) => {
+    // Cancel any in-progress create
+    setCreatingInFolderId(null)
+    setDeleteTargetId(null)
+    setEditingItemId(itemId)
+  }, [])
+
+  const handleConfirmRename = useCallback((itemId: string, newTitle: string) => {
+    onRenameItem?.(itemId, newTitle)
+    setEditingItemId(null)
+  }, [onRenameItem])
+
+  const handleCancelRename = useCallback(() => {
+    setEditingItemId(null)
+  }, [])
+
+  const handleStartCreate = useCallback((parentId: string) => {
+    // Cancel any in-progress rename
+    setEditingItemId(null)
+    setDeleteTargetId(null)
+    setCreatingInFolderId(parentId)
+    // Auto-expand the parent folder
+    setExpandedIds(prev => {
+      const set = new Set(prev)
+      set.add(parentId)
+      return Array.from(set)
+    })
+  }, [setExpandedIds])
+
+  const handleConfirmCreate = useCallback((parentId: string, title: string) => {
+    const newId = onCreateFolder?.(parentId, title)
+    setCreatingInFolderId(null)
+    // Select and expand the new folder
+    if (newId) {
+      setExpandedIds(prev => {
+        const set = new Set(prev)
+        set.add(newId)
+        return Array.from(set)
+      })
+      onItemSelect(newId)
+    }
+  }, [onCreateFolder, onItemSelect, setExpandedIds])
+
+  const handleCancelCreate = useCallback(() => {
+    setCreatingInFolderId(null)
+  }, [])
+
+  const handleStartDelete = useCallback((itemId: string) => {
+    setEditingItemId(null)
+    setCreatingInFolderId(null)
+    setDeleteTargetId(itemId)
+  }, [])
+
+  const handleConfirmDelete = useCallback((itemId: string) => {
+    // Navigation is handled centrally by the parent's onDeleteItem (handleDeleteItem in page.tsx)
+    onDeleteItem?.(itemId)
+    setDeleteTargetId(null)
+  }, [onDeleteItem])
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteTargetId(null)
+  }, [])
 
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startWidth: number; didDrag: boolean } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Keyboard shortcut: Cmd+K to focus search, Escape to clear
+  // Use refs for CRUD state so keyboard handlers avoid stale closures
+  const editingRef = useRef(editingItemId)
+  editingRef.current = editingItemId
+  const creatingRef = useRef(creatingInFolderId)
+  creatingRef.current = creatingInFolderId
+  const deleteRef = useRef(deleteTargetId)
+  deleteRef.current = deleteTargetId
+  const activeItemRef = useRef(activeItem)
+  activeItemRef.current = activeItem
+  const treeRef = useRef(treeProp)
+  treeRef.current = treeProp
+
+  // Keyboard shortcuts: Cmd+K, Escape, F2, Delete/Backspace, Shift+N
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName
+      const isInputFocused = tag === "INPUT" || tag === "TEXTAREA"
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         if (isCollapsed && onToggleCollapse) onToggleCollapse()
         setTimeout(() => searchInputRef.current?.focus(), isCollapsed ? 300 : 0)
+        return
       }
-      if (e.key === 'Escape' && searchQuery) {
-        setSearchQuery("")
-        searchInputRef.current?.blur()
+
+      if (e.key === 'Escape') {
+        // Cancel any in-progress CRUD first, then clear search
+        if (editingRef.current) { setEditingItemId(null); e.preventDefault(); return }
+        if (creatingRef.current) { setCreatingInFolderId(null); e.preventDefault(); return }
+        if (deleteRef.current) { setDeleteTargetId(null); e.preventDefault(); return }
+        if (searchQuery) { setSearchQuery(""); searchInputRef.current?.blur(); return }
+        return
+      }
+
+      // Skip remaining shortcuts if user is in an input field
+      if (isInputFocused) return
+      // Skip if any CRUD operation is in progress
+      if (editingRef.current || creatingRef.current || deleteRef.current) return
+
+      if (e.key === 'F2' && activeItemRef.current) {
+        const navItem = getNavItemUtil(activeItemRef.current, treeRef.current)
+        if (navItem && navItem.type !== "section" && navItem.type !== "search" && navItem.type !== "more") {
+          e.preventDefault()
+          handleStartRename(activeItemRef.current)
+        }
+        return
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && activeItemRef.current) {
+        const navItem = getNavItemUtil(activeItemRef.current, treeRef.current)
+        if (navItem && navItem.type !== "section" && navItem.type !== "search" && navItem.type !== "more") {
+          e.preventDefault()
+          handleStartDelete(activeItemRef.current)
+        }
+        return
+      }
+
+      if (e.key === 'N' && e.shiftKey && !e.metaKey && !e.ctrlKey && activeItemRef.current) {
+        // Shift+N: create new folder inside the active item (only if it's a folder)
+        const navItem = getNavItemUtil(activeItemRef.current, treeRef.current)
+        if (navItem?.type === "folder") {
+          e.preventDefault()
+          handleStartCreate(activeItemRef.current)
+        }
+        return
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [searchQuery, isCollapsed, onToggleCollapse])
+  }, [searchQuery, isCollapsed, onToggleCollapse, handleStartRename, handleStartDelete, handleStartCreate])
 
   // Filtered items for display
   const displayedItems = useMemo(() => {
@@ -770,6 +1080,19 @@ export const MainNavigation = memo(function MainNavigation({
             isCollapsed={isCollapsed}
             currentActiveItem={activeItem}
             searchQuery={searchQuery}
+            editingItemId={editingItemId}
+            creatingInFolderId={creatingInFolderId}
+            deleteTargetId={deleteTargetId}
+            onStartRename={handleStartRename}
+            onConfirmRename={handleConfirmRename}
+            onCancelRename={handleCancelRename}
+            onStartCreate={handleStartCreate}
+            onConfirmCreate={handleConfirmCreate}
+            onCancelCreate={handleCancelCreate}
+            onStartDelete={handleStartDelete}
+            onConfirmDelete={handleConfirmDelete}
+            onCancelDelete={handleCancelDelete}
+            tree={treeProp}
           />
         ))}
 

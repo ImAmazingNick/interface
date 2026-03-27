@@ -123,6 +123,12 @@ export interface MainNavigationProps {
   onPlusClick?: (id: string) => void
   sidebarWidth?: number
   onWidthChange?: (width: number) => void
+  tree?: TreeNavigationItem[]
+  onCreateFolder?: (parentId: string, title: string) => string
+  onRenameItem?: (itemId: string, newTitle: string) => void
+  onDeleteItem?: (itemId: string) => void
+  onRestoreDeletedItem?: () => void
+  getDeletedItem?: () => { item: TreeNavigationItem; parentId: string | null; index: number } | null
 }
 
 export interface CategoryGroup {
