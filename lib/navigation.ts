@@ -1,5 +1,6 @@
 import { TREE_NAVIGATION, CATEGORY_GROUPS, CATEGORY_TREES } from "@/constants"
-import type { CategoryGroup, TreeNavigationItem } from "@/types"
+import type { CategoryGroup, TreeNavigationItem, ArtifactType } from "@/types"
+import type { Session } from "@/types/sessions"
 
 export interface BreadcrumbItem {
   id: string
@@ -141,4 +142,95 @@ export function getCategoryForNavItem(navItemId: string): string | null {
     if (findItem(navItemId, items as unknown as NavItem[])) return categoryId
   }
   return null
+}
+
+// ── Artifact type utilities ──────────────────────────────────────────────
+
+export const ARTIFACT_TYPE_LABELS: Record<string, string> = {
+  dashboard: "Dashboards",
+  report: "Reports",
+  connection: "Connections",
+  query: "Data Tables",
+  recipe: "Recipes",
+  chat: "Chats",
+  settings: "Admin",
+}
+
+/** Collect all leaf items recursively with their artifactType */
+function collectLeafItems(items: readonly NavItem[]): NavItem[] {
+  const result: NavItem[] = []
+  for (const item of items) {
+    if (SKIP_TYPES.has(item.type)) continue
+    if (item.type === "folder" && item.children) {
+      result.push(...collectLeafItems(item.children))
+    } else if (item.type === "file") {
+      result.push(item)
+    }
+  }
+  return result
+}
+
+export interface ArtifactTypeInfo {
+  type: string
+  label: string
+  count: number
+}
+
+/** Get distinct artifact types and counts for leaf items in a folder */
+export function getArtifactTypesInFolder(folderId: string): ArtifactTypeInfo[] {
+  const folder = getNavItem(folderId)
+  if (!folder?.children) return []
+  const leaves = collectLeafItems(folder.children)
+  const counts = new Map<string, number>()
+  for (const leaf of leaves) {
+    const t = leaf.artifactType ?? "generic"
+    counts.set(t, (counts.get(t) ?? 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => ({
+      type,
+      label: ARTIFACT_TYPE_LABELS[type] ?? type,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count)
+}
+
+/** Get all descendant item IDs for a folder (for session scoping) */
+export function getAllDescendantIds(folderId: string): Set<string> {
+  const folder = getNavItem(folderId)
+  if (!folder?.children) return new Set()
+  const ids = new Set<string>()
+  const walk = (items: readonly NavItem[]) => {
+    for (const item of items) {
+      ids.add(item.id)
+      if (item.children) walk(item.children)
+    }
+  }
+  walk(folder.children)
+  return ids
+}
+
+/** Filter sessions to those related to items in the current scope */
+export function getSessionsInScope(sessions: Session[], activeNavItem: string): Session[] {
+  const folder = getNavItem(activeNavItem)
+
+  // Folder scope: filter to sessions related to any descendant
+  if (folder?.type === "folder") {
+    const descendantIds = getAllDescendantIds(activeNavItem)
+    return sessions.filter(s =>
+      s.relatedItems.some(ri => descendantIds.has(ri.id)) ||
+      s.relatedArtifacts.some(id => descendantIds.has(id))
+    )
+  }
+
+  // Item scope: filter to sessions related to this specific item
+  if (folder?.type === "file") {
+    return sessions.filter(s =>
+      s.relatedItems.some(ri => ri.id === activeNavItem) ||
+      s.relatedArtifacts.includes(activeNavItem)
+    )
+  }
+
+  // No scope (welcome, AI agent, etc.): return all sessions
+  return sessions
 }

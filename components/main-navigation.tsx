@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TREE_NAVIGATION, WORKSPACES } from "@/constants"
+import { useLocalStorage } from "@/hooks/use-local-storage"
 import type { MainNavigationProps } from "@/types"
 import { GripVertical, ChevronDown, ChevronRight, FolderOpen, Folder, File, FileText, Plus, Search, X, Lock, Users2, Building2, Settings, Users, Bot, Bell, User, LogOut } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -276,7 +277,7 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
           <span
             role="button"
             tabIndex={0}
-            className="absolute -right-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 cursor-pointer"
+            className="absolute -right-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 focus-visible:scale-100 cursor-pointer"
             onClick={handlePlusClick}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePlusClick(e as unknown as React.MouseEvent); } }}
             aria-label={`Add new item to ${item.title}`}
@@ -348,27 +349,35 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
         }}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0 relative">
-          {/* Expand/Collapse Chevron - moved to left */}
-          {isFolder && hasChildren && (
+          {/* Folder/File Icon — for folders with children, chevron replaces icon on hover */}
+          {isFolder && hasChildren ? (
             <span
               role="button"
               tabIndex={0}
-              className="flex items-center justify-center w-4 h-4 -ml-1 cursor-pointer hover:bg-sidebar-accent/50 rounded-sm transition-colors duration-150"
+              className="relative flex items-center justify-center w-4 h-4 cursor-pointer hover:bg-sidebar-accent/50 rounded-sm transition-colors duration-150"
               onClick={handleChevronClick}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleChevronClick(e as unknown as React.MouseEvent); } }}
               aria-label={item.expanded ? `Collapse ${item.title}` : `Expand ${item.title}`}
             >
-              {item.expanded ? (
-                <ChevronDown className="h-3 w-3 text-orange-600 transition-transform duration-200" aria-hidden="true" />
-              ) : (
-                <ChevronRight className="h-3 w-3 text-orange-600 transition-transform duration-200" aria-hidden="true" />
-              )}
+              {/* Folder icon — hidden on hover */}
+              <span className="group-hover:opacity-0 transition-opacity duration-150">
+                {item.expanded ? (
+                  <FolderOpen className="h-4 w-4 text-orange-500" aria-hidden="true" />
+                ) : (
+                  <Folder className="h-4 w-4 text-orange-600" aria-hidden="true" />
+                )}
+              </span>
+              {/* Chevron — shown on hover, replaces folder icon */}
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {item.expanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-orange-600" aria-hidden="true" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-orange-600" aria-hidden="true" />
+                )}
+              </span>
             </span>
-          )}
-
-          {/* Folder/File Icon */}
-          {isFolder ? (
-            <div className="relative">
+          ) : isFolder ? (
+            <div className="relative flex items-center justify-center w-4 h-4">
               {item.expanded ? (
                 <FolderOpen className="h-4 w-4 text-orange-500" />
               ) : (
@@ -404,7 +413,7 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
             <span
               role="button"
               tabIndex={0}
-              className="absolute -right-1 opacity-0 group-hover:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 cursor-pointer"
+              className="absolute -right-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-[opacity,transform] duration-200 scale-75 group-hover:scale-100 focus-visible:scale-100 cursor-pointer"
               onClick={handlePlusClick}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePlusClick(e as unknown as React.MouseEvent); } }}
               aria-label={`Add new item to ${item.title}`}
@@ -507,6 +516,17 @@ const UserProfile = memo(function UserProfile({ isCollapsed }: { isCollapsed: bo
   )
 })
 
+// Compute default expanded folder IDs from TREE_NAVIGATION
+function collectExpandedIds(items: readonly any[]): string[] {
+  const ids: string[] = []
+  for (const item of items) {
+    if (item.expanded) ids.push(item.id)
+    if (item.children) ids.push(...collectExpandedIds(item.children))
+  }
+  return ids
+}
+const DEFAULT_EXPANDED_IDS = collectExpandedIds(TREE_NAVIGATION)
+
 export const MainNavigation = memo(function MainNavigation({
   activeItem,
   onItemSelect,
@@ -516,7 +536,21 @@ export const MainNavigation = memo(function MainNavigation({
   sidebarWidth = 256,
   onWidthChange,
 }: MainNavigationProps & { onPlusClick?: (id: string) => void }) {
-  const [treeItems, setTreeItems] = useState(TREE_NAVIGATION)
+  // Persist expanded folder IDs across sessions
+  const [expandedIds, setExpandedIds] = useLocalStorage<string[]>('nav-expanded-folders', DEFAULT_EXPANDED_IDS)
+
+  const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds])
+
+  const treeItems = useMemo(() => {
+    const applyExpanded = (items: readonly any[]): any[] =>
+      items.map(item => ({
+        ...item,
+        expanded: expandedSet.has(item.id),
+        ...(item.children ? { children: applyExpanded(item.children) } : {}),
+      }))
+    return applyExpanded(TREE_NAVIGATION as unknown as any[])
+  }, [expandedSet])
+
   const [isDragging, setIsDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startWidth: number; didDrag: boolean } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -554,20 +588,13 @@ export const MainNavigation = memo(function MainNavigation({
   )
 
   const handleToggleExpand = useCallback((itemId: string) => {
-    const updateTreeItem = (items: readonly any[]): any[] => {
-      return items.map(item => {
-        if (item.id === itemId) {
-          return { ...item, expanded: !item.expanded }
-        }
-        if (item.children) {
-          return { ...item, children: updateTreeItem(item.children) }
-        }
-        return item
-      })
-    }
-
-    setTreeItems(prev => updateTreeItem(prev) as unknown as typeof TREE_NAVIGATION)
-  }, [])
+    setExpandedIds(prev => {
+      const set = new Set(prev)
+      if (set.has(itemId)) set.delete(itemId)
+      else set.add(itemId)
+      return Array.from(set)
+    })
+  }, [setExpandedIds])
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()

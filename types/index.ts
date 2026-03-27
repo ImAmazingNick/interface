@@ -14,11 +14,14 @@ export interface NavigationItem {
   href?: string
 }
 
+export type ArtifactType = 'dashboard' | 'report' | 'connection' | 'query' | 'recipe' | 'chat' | 'settings'
+
 export interface TreeNavigationItem {
   id: string
   title: string
   icon: React.ComponentType<{ className?: string }>
   type: 'folder' | 'file' | 'section' | 'search' | 'more'
+  artifactType?: ArtifactType
   children?: TreeNavigationItem[]
   expanded?: boolean
   href?: string

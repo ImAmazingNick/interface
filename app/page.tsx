@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels"
 import { MainNavigation } from "@/components/main-navigation"
 import { CategoryNavigation } from "@/components/category-navigation"
@@ -16,10 +16,17 @@ import { ItemPage } from "@/components/item-page"
 import { ArtifactPanel } from "@/components/artifact-panel"
 import { SetupSourcesStep } from "@/components/setup-sources-step"
 import { SetupProcessingStep } from "@/components/setup-processing-step"
+import { CenterViewTabs } from "@/components/center-view-tabs"
+import { SessionsList } from "@/components/sessions/sessions-list"
+import { SessionContent } from "@/components/sessions/session-content"
+import { ChainOfThoughtsPanel } from "@/components/sessions/chain-of-thoughts-panel"
+import { SessionPropertiesPanel } from "@/components/sessions/session-properties-panel"
+import { useSessionState } from "@/hooks/use-session-state"
 import { STEP_IDS } from "@/constants"
 import { cn } from "@/lib/utils"
-import { isNavFolder, getNavItem, getAncestorIds } from "@/lib/navigation"
-import { LayoutGrid } from "lucide-react"
+import { isNavFolder, getNavItem, getNavChildren, getAncestorIds, getArtifactTypesInFolder, getSessionsInScope } from "@/lib/navigation"
+import type { TabConfig } from "@/components/center-view-tabs"
+import { LayoutGrid, MessageSquare } from "lucide-react"
 import type { Step, ArtifactPanelContent } from "@/types"
 import type { SelectedSourceData } from "@/types/setup-interfaces"
 
@@ -28,6 +35,23 @@ export default function Home() {
   const [isNavCollapsed, setIsNavCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [navMode, setNavMode] = useLocalStorage<'tree' | 'category'>('nav-mode', 'tree')
+  const [centerTab, setCenterTab] = useLocalStorage<string>('center-tab', 'all')
+  const [folderTabStates, setFolderTabStates] = useLocalStorage<Record<string, string>>('folder-tab-states', {})
+  const {
+    sessions,
+    activeSessionId,
+    activeSession,
+    showProperties,
+    handleSelectSession,
+    handleBackToList,
+    handleSendMessage,
+    handleCreateSession,
+    handleToggleProperties,
+    handleDeleteSession,
+    handleDuplicateSession,
+    handleRenameSession,
+    handleChangeStatus,
+  } = useSessionState()
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-width")
@@ -35,7 +59,15 @@ export default function Home() {
       const w = Number(saved)
       if (w >= 180 && w <= 480) setSidebarWidth(w)
     }
-  }, [])
+    // Migrate old tab values
+    if (centerTab === "artifacts" || centerTab === "recents") setCenterTab("all")
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sessions scoped to the currently selected nav item
+  const scopedSessions = useMemo(
+    () => getSessionsInScope(sessions, activeNavItem),
+    [sessions, activeNavItem],
+  )
 
   const handleSidebarWidthChange = useCallback((width: number) => {
     setSidebarWidth(width)
@@ -81,7 +113,23 @@ export default function Home() {
     // Set the active item to the resolved target
     setActiveNavItem(targetId)
 
-    // Close artifact panel when navigating via sidebar
+    // Always show content (not sessions) when navigating via sidebar
+    if (isNavFolder(targetId)) {
+      const types = getArtifactTypesInFolder(targetId)
+      const validKeys = new Set(["all", "sessions", ...types.map((t) => t.type)])
+      // Restore per-folder tab state if available
+      const savedTab = folderTabStates[targetId]
+      if (savedTab && validKeys.has(savedTab) && savedTab !== "sessions") {
+        setCenterTab(savedTab)
+      } else if (!validKeys.has(centerTab) || centerTab === "sessions") {
+        setCenterTab("all")
+      }
+    } else {
+      // Non-folder items: show content, not sessions
+      if (centerTab === "sessions") {
+        setCenterTab("all")
+      }
+    }
     handleCloseArtifactPanel()
 
     // Exit workflow, conversions dashboard, and processing step when navigating to a different page
@@ -255,6 +303,13 @@ export default function Home() {
     setIsNavCollapsed(false)
   }, [])
 
+  // Compute the type filter to pass to TemplatesPage
+  const activeTypeFilter = useMemo(() => {
+    if (centerTab === "sessions") return undefined
+    if (centerTab === "all") return undefined
+    return centerTab  // artifact type slug
+  }, [centerTab])
+
   const renderContent = () => {
     // If processing step is active, show it
     if (showProcessingStep) {
@@ -306,8 +361,10 @@ export default function Home() {
     if (isNavFolder(activeNavItem)) {
       return <TemplatesPage
         folderType={activeNavItem}
+        typeFilter={activeTypeFilter}
         onAddNew={handlePlusClick}
         onItemNavigate={handleNavItemSelect}
+        onSwitchToAllTab={() => setCenterTab("all")}
       />
     }
 
@@ -330,6 +387,175 @@ export default function Home() {
     // Fallback for items with no parent folder
     return <WelcomePage6Cards onArtifactGenerated={handleOpenArtifactPanel} />
   }
+
+  const resizeHandleClasses = "w-2 bg-transparent relative group hover:bg-muted/60 data-[resize-handle-active]:bg-muted/80"
+  const resizeHandleLine = "absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/25 transition-colors duration-150"
+
+  const sessionListProps = useMemo(() => {
+    const navItem = getNavItem(activeNavItem)
+    return {
+      sessions: scopedSessions,
+      activeSessionId: activeSessionId ?? undefined,
+      onSelectSession: handleSelectSession,
+      onCreateSession: () => handleCreateSession({ navItemId: activeNavItem }),
+      onDeleteSession: handleDeleteSession,
+      onDuplicateSession: handleDuplicateSession,
+      onRenameSession: handleRenameSession,
+      // Scoped empty state props (Upgrade 8)
+      scopeName: navItem?.title,
+      totalSessionCount: sessions.length,
+      onShowAllSessions: () => handleNavItemSelect("ai-agent"),
+    }
+  }, [scopedSessions, sessions.length, activeSessionId, activeNavItem, handleSelectSession, handleCreateSession, handleDeleteSession, handleDuplicateSession, handleRenameSession, handleNavItemSelect])
+
+  const compactSessionListProps = useMemo(() => ({
+    ...sessionListProps,
+    isCompact: true,
+  }), [sessionListProps])
+
+  const renderSessionsView = () => {
+    if (!activeSession) {
+      return (
+        <SessionsList {...sessionListProps} />
+      )
+    }
+
+    if (showProperties) {
+      return (
+        <PanelGroup direction="horizontal" id="session-full-props">
+          <Panel defaultSize={20} minSize={15} collapsible collapsedSize={0}>
+            <SessionsList {...compactSessionListProps} />
+          </Panel>
+          <PanelResizeHandle className={resizeHandleClasses}>
+            <div className={resizeHandleLine} />
+          </PanelResizeHandle>
+          <Panel defaultSize={30} minSize={20}>
+            <SessionContent
+              session={activeSession}
+              onBack={handleBackToList}
+              onSendMessage={handleSendMessage}
+              showProperties={showProperties}
+              onToggleProperties={handleToggleProperties}
+            />
+          </Panel>
+          <PanelResizeHandle className={resizeHandleClasses}>
+            <div className={resizeHandleLine} />
+          </PanelResizeHandle>
+          <Panel defaultSize={25} minSize={15}>
+            <ChainOfThoughtsPanel
+              steps={activeSession.thoughtSteps}
+              isLive={activeSession.status === "active"}
+              onClose={handleBackToList}
+            />
+          </Panel>
+          <PanelResizeHandle className={resizeHandleClasses}>
+            <div className={resizeHandleLine} />
+          </PanelResizeHandle>
+          <Panel defaultSize={25} minSize={15}>
+            <SessionPropertiesPanel
+              session={activeSession}
+              onClose={handleToggleProperties}
+              onChangeStatus={handleChangeStatus}
+              onNavigateToItem={handleNavItemSelect}
+            />
+          </Panel>
+        </PanelGroup>
+      )
+    }
+
+    return (
+      <PanelGroup direction="horizontal" id="session-full">
+        <Panel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+          <SessionsList {...compactSessionListProps} />
+        </Panel>
+        <PanelResizeHandle className={resizeHandleClasses}>
+          <div className={resizeHandleLine} />
+        </PanelResizeHandle>
+        <Panel defaultSize={40} minSize={25}>
+          <SessionContent
+            session={activeSession}
+            onBack={handleBackToList}
+            onSendMessage={handleSendMessage}
+            showProperties={showProperties}
+            onToggleProperties={handleToggleProperties}
+          />
+        </Panel>
+        <PanelResizeHandle className={resizeHandleClasses}>
+          <div className={resizeHandleLine} />
+        </PanelResizeHandle>
+        <Panel defaultSize={35} minSize={20}>
+          <ChainOfThoughtsPanel
+            steps={activeSession.thoughtSteps}
+            isLive={activeSession.status === "active"}
+            onClose={handleBackToList}
+          />
+        </Panel>
+      </PanelGroup>
+    )
+  }
+
+  const handleCenterTabChange = useCallback((tab: string) => {
+    setCenterTab(tab)
+    // Persist tab selection per folder
+    if (isNavFolder(activeNavItem)) {
+      setFolderTabStates(prev => {
+        const next = { ...prev, [activeNavItem]: tab }
+        // LRU eviction: keep at most 50 entries
+        const keys = Object.keys(next)
+        if (keys.length > 50) {
+          delete next[keys[0]]
+        }
+        return next
+      })
+    }
+    if (tab === "sessions") {
+      handleCloseArtifactPanel()
+    }
+  }, [setCenterTab, handleCloseArtifactPanel, activeNavItem, setFolderTabStates])
+
+  const showTabs = !showWorkflow && !showConversionsDashboard && !showProcessingStep
+
+  // Build dynamic tab list based on current context
+  const availableTabs = useMemo((): TabConfig[] => {
+    if (!showTabs) return []
+
+    const isFolder = isNavFolder(activeNavItem)
+
+    if (isFolder) {
+      const types = getArtifactTypesInFolder(activeNavItem)
+      const children = getNavChildren(activeNavItem).filter(c => c.type !== "section" && c.type !== "more")
+
+      const contentTabs: TabConfig[] = [
+        { key: "all", label: "All", count: children.length },
+      ]
+
+      // Add all type tabs (no cap)
+      contentTabs.push(...types.map((t) => ({ key: t.type, label: t.label, count: t.count })))
+
+      return [
+        ...contentTabs,
+        { key: "sessions", label: "Sessions", count: scopedSessions.length, icon: MessageSquare, separated: true },
+      ]
+    }
+
+    // Item or welcome — no tabs
+    return []
+  }, [activeNavItem, scopedSessions.length, showTabs])
+
+  // Ensure the active tab is valid for the current context
+  useEffect(() => {
+    if (!showTabs || availableTabs.length === 0) return
+    const validKeys = new Set(availableTabs.map((t) => t.key))
+    if (!validKeys.has(centerTab)) {
+      // Pick the first content tab (not sessions) as default
+      const defaultTab = availableTabs.find((t) => t.key !== "sessions")
+      if (defaultTab) {
+        setCenterTab(defaultTab.key)
+      }
+      // If only sessions tab exists (non-folder views), don't force to it —
+      // content renders by default when centerTab !== "sessions"
+    }
+  }, [availableTabs, centerTab, showTabs, setCenterTab])
 
   return (
     <div className="h-screen flex bg-background">
@@ -368,10 +594,33 @@ export default function Home() {
         )}
       </div>
       <main className="flex-1 overflow-hidden">
-        <PanelGroup direction="horizontal">
+        <PanelGroup direction="horizontal" id="main-layout">
           <Panel defaultSize={100} minSize={35}>
-            <div className="h-full overflow-auto overscroll-contain">
-              {renderContent()}
+            <div className="h-full flex flex-col overflow-hidden">
+              {showTabs && availableTabs.length > 0 && (
+                <CenterViewTabs
+                  tabs={availableTabs}
+                  activeTab={centerTab}
+                  onTabChange={handleCenterTabChange}
+                />
+              )}
+              <div
+                {...(showTabs && availableTabs.length > 0 ? {
+                  role: "tabpanel" as const,
+                  id: `tabpanel-${centerTab}`,
+                  "aria-labelledby": `tab-${centerTab}`,
+                } : {})}
+                className={cn(
+                  "flex-1",
+                  centerTab === "sessions" && showTabs && activeSession
+                    ? "overflow-hidden"
+                    : "overflow-auto overscroll-contain"
+                )}
+              >
+                {centerTab === "sessions" && showTabs
+                  ? renderSessionsView()
+                  : renderContent()}
+              </div>
             </div>
           </Panel>
           <PanelResizeHandle className={cn(

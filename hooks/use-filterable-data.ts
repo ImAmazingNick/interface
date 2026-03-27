@@ -9,6 +9,7 @@ interface UseFilterableDataOptions<T> {
   columns: FilterColumnConfig<T>[]
   searchTerm?: string
   searchKeys?: (keyof T)[]
+  searchFn?: (item: T, term: string) => boolean
 }
 
 interface UseFilterableDataReturn<T> {
@@ -39,6 +40,7 @@ export function useFilterableData<T>({
   columns,
   searchTerm,
   searchKeys,
+  searchFn,
 }: UseFilterableDataOptions<T>): UseFilterableDataReturn<T> {
   const [filters, setFilters] = useState<FilterState>({})
 
@@ -98,13 +100,17 @@ export function useFilterableData<T>({
   const filteredData = useMemo(() => {
     return data.filter((item) => {
       // Text search
-      if (searchTerm && searchKeys && searchKeys.length > 0) {
-        const q = searchTerm.toLowerCase()
-        const matchesSearch = searchKeys.some((key) => {
-          const val = item[key]
-          return val != null && String(val).toLowerCase().includes(q)
-        })
-        if (!matchesSearch) return false
+      if (searchTerm) {
+        if (searchFn) {
+          if (!searchFn(item, searchTerm)) return false
+        } else if (searchKeys && searchKeys.length > 0) {
+          const q = searchTerm.toLowerCase()
+          const matchesSearch = searchKeys.some((key) => {
+            const val = item[key]
+            return val != null && String(val).toLowerCase().includes(q)
+          })
+          if (!matchesSearch) return false
+        }
       }
 
       // Column filters: AND across columns, OR within a column
@@ -119,7 +125,7 @@ export function useFilterableData<T>({
 
       return true
     })
-  }, [data, filters, searchTerm, searchKeys, columnMap])
+  }, [data, filters, searchTerm, searchKeys, searchFn, columnMap])
 
   // Build ActiveFilter[] for the filter bar
   const activeFilters = useMemo((): ActiveFilter[] => {
