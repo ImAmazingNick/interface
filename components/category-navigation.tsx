@@ -240,16 +240,19 @@ const CategoryStripButton = memo(function CategoryStripButton({
   group,
   isActive,
   onClick,
+  iconOnly,
 }: {
   group: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }
   isActive: boolean
   onClick: () => void
+  iconOnly?: boolean
 }) {
   const Icon = group.icon
   return (
     <button
       className={cn(
-        "w-full flex flex-col items-center gap-1 py-2.5 px-1 rounded-lg transition-all duration-200 cursor-pointer",
+        "w-full flex flex-col items-center rounded-lg transition-all duration-200 cursor-pointer",
+        iconOnly ? "gap-0 py-2 px-0.5" : "gap-1 py-2.5 px-1",
         isActive
           ? "text-sidebar-foreground"
           : "text-sidebar-foreground/50 hover:text-sidebar-foreground/80 hover:bg-sidebar-accent/15",
@@ -267,10 +270,12 @@ const CategoryStripButton = memo(function CategoryStripButton({
       >
         <Icon className="h-[18px] w-[18px]" />
       </div>
-      <span className={cn(
-        "text-[10px] leading-tight text-center w-full transition-all duration-200",
-        isActive ? "font-semibold text-primary" : "font-medium",
-      )}>{group.label}</span>
+      {!iconOnly && (
+        <span className={cn(
+          "text-[10px] leading-tight text-center w-full transition-all duration-200",
+          isActive ? "font-semibold text-primary" : "font-medium",
+        )}>{group.label}</span>
+      )}
     </button>
   )
 })
@@ -469,7 +474,8 @@ export const CategoryNavigation = memo(function CategoryNavigation({
   onModeToggle,
   navMode = "category",
   onModeChange,
-}: MainNavigationProps & { onPlusClick?: (id: string) => void; onModeToggle?: () => void; navMode?: NavMode; onModeChange?: (mode: NavMode) => void }) {
+  iconOnly,
+}: MainNavigationProps & { onPlusClick?: (id: string) => void; onModeToggle?: () => void; navMode?: NavMode; onModeChange?: (mode: NavMode) => void; iconOnly?: boolean }) {
   const [activeCategory, setActiveCategory] = useState<string | null>(() => {
     return getCategoryForNavItem(activeItem)
   })
@@ -633,14 +639,23 @@ export const CategoryNavigation = memo(function CategoryNavigation({
   return (
     <div className="h-screen flex relative">
       {/* Category Strip */}
-      <div className="h-screen w-20 flex-shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
-        <div className="p-2 pt-4 pb-2 flex flex-col items-center gap-2 border-b border-sidebar-border/50">
+      <div className={cn(
+        "h-screen flex-shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col",
+        iconOnly ? "w-[52px]" : "w-20",
+      )}>
+        <div className={cn(
+          "flex flex-col items-center border-b border-sidebar-border/50",
+          iconOnly ? "p-1.5 pt-3 pb-1.5 gap-1.5" : "p-2 pt-4 pb-2 gap-2",
+        )}>
           <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
-              <span className="text-sm font-bold text-primary-foreground">CF</span>
+            <div className={cn(
+              "rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg",
+              iconOnly ? "w-8 h-8" : "w-10 h-10",
+            )}>
+              <span className={cn("font-bold text-primary-foreground", iconOnly ? "text-xs" : "text-sm")}>CF</span>
             </div>
             {onModeChange && (
-              <div className="absolute -right-2 -top-2">
+              <div className={cn("absolute", iconOnly ? "-right-1 -top-1" : "-right-2 -top-2")}>
                 <NavModeSwitcher currentMode={navMode} onModeChange={onModeChange} />
               </div>
             )}
@@ -648,13 +663,14 @@ export const CategoryNavigation = memo(function CategoryNavigation({
           <CategoryWorkspaceSelector />
         </div>
 
-        <div className="flex-1 py-3 px-1.5 space-y-1 overflow-y-auto">
+        <div className={cn("flex-1 space-y-1 overflow-y-auto", iconOnly ? "py-2 px-1" : "py-3 px-1.5")}>
           {CATEGORY_GROUPS.map((group) => (
             <CategoryStripButton
               key={group.id}
               group={group}
               isActive={activeCategory === group.id || (activeCategory === null && derivedCategory === group.id)}
               onClick={() => handleCategoryClick(group.id)}
+              iconOnly={iconOnly}
             />
           ))}
         </div>

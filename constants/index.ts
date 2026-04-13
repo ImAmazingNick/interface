@@ -850,6 +850,12 @@ export const CATEGORY_GROUPS = [
   { id: "admin",           label: "Admin",          icon: Settings,       navItemIds: ["admin"] },
 ]
 
+export const TAB_CATEGORY_GROUPS = [
+  { id: "knowledge",  label: "Knowledge",  icon: BookOpen,       treeKey: "knowledge" },
+  { id: "ai-agent",   label: "Sessions",   icon: MessageSquare,  treeKey: "ai-agent" },
+  { id: "artefacts",  label: "Artefacts",  icon: Briefcase,      treeKey: "artefacts" },
+]
+
 export const CARD_CATEGORY_GROUPS = [
   { id: "knowledge",       label: "Knowledge",      icon: BookOpen,       treeKey: "knowledge" },
   { id: "ai-agent",        label: "Sessions",       icon: MessageSquare,  treeKey: "ai-agent" },
@@ -1036,6 +1042,146 @@ export const CATEGORY_TREES: Record<string, any[]> = {
     { id: "recent-recipes-section", title: "Recent", type: "section" },
     { id: "recent-recipe-paid-ads-ga-basic", title: "Paid Ads Google Analytics - Basic Analytics", icon: FileText, type: "file", artifactType: "recipe" as const },
     { id: "recent-recipe-gads-keyword-perf", title: "Google Ads Keyword Performance", icon: FileText, type: "file", artifactType: "recipe" as const },
+  ],
+  "artefacts": [
+    {
+      id: "analytics-section",
+      title: "Analytics",
+      icon: BarChart3,
+      type: "section",
+    },
+    {
+      id: "dashboards",
+      title: "Dashboards",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        { id: "dashboard-templates", title: "Dashboard Templates", icon: BarChart3, type: "file", artifactType: "dashboard" as const, status: "template", tag: "Templates", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Pre-built dashboard templates for quick setup across common use cases." },
+        { id: "cross-channel-dashboard", title: "Cross Channel Dashboard", icon: BarChart3, type: "file", artifactType: "dashboard" as const, status: "template", tag: "Analytics", updated: "Dec 15, 2024", updatedBy: "John Smith", description: "Unified view of paid search, social, and display performance across all channels.", relatedTo: [{ id: "google-ads-connection", title: "Google Ads", type: "connection" }, { id: "meta-ads-connection", title: "Meta Ads", type: "connection" }] },
+        { id: "ecommerce-dashboard", title: "E-commerce Dashboard", icon: BarChart3, type: "file", artifactType: "dashboard" as const, status: "private", tag: "E-commerce", updated: "Dec 12, 2024", updatedBy: "Emma Davis", description: "Sales funnel, revenue trends, and product performance metrics." },
+        { id: "marketing-performance-dashboard", title: "Marketing Performance", icon: BarChart3, type: "file", artifactType: "dashboard" as const, status: "shared", tag: "Marketing", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Campaign ROI, spend efficiency, and audience engagement overview.", relatedTo: [{ id: "meta-ads-connection", title: "Meta Ads", type: "connection" }, { id: "google-ads-connection", title: "Google Ads", type: "connection" }] },
+      ],
+    },
+    {
+      id: "reports",
+      title: "Reports",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        { id: "marketing-report-1", title: "Monthly Performance Report", icon: FileText, type: "file", artifactType: "report" as const, status: "template", tag: "Monthly", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Auto-generated performance summary across all active campaigns.", relatedTo: [{ id: "cross-channel-dashboard", title: "Cross Channel Dashboard", type: "dashboard" }] },
+        { id: "marketing-report-2", title: "Campaign Analysis Report", icon: FileText, type: "file", artifactType: "report" as const, status: "private", tag: "Campaigns", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Deep-dive analysis of individual campaign performance and optimizations." },
+        { id: "marketing-report-3", title: "ROI Analysis Report", icon: FileText, type: "file", artifactType: "report" as const, status: "shared", tag: "ROI", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Return on investment breakdown by channel, campaign, and creative.", relatedTo: [{ id: "marketing-performance-dashboard", title: "Marketing Performance", type: "dashboard" }, { id: "cross-channel-dashboard", title: "Cross Channel Dashboard", type: "dashboard" }] },
+      ],
+    },
+    {
+      id: "data-pipelines-section",
+      title: "Data Pipelines",
+      icon: Database,
+      type: "section",
+    },
+    {
+      id: "connections",
+      title: "Connections",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        { id: "google-ads-connection", title: "Google Ads", icon: Search, type: "file", artifactType: "connection" as const, status: "shared", tag: "Google Ads", updated: "Dec 15, 2024", updatedBy: "System Admin", account: "ads@company.com" },
+        { id: "meta-ads-connection", title: "Meta Ads", icon: User, type: "file", artifactType: "connection" as const, status: "shared", tag: "Meta Ads", updated: "Dec 15, 2024", updatedBy: "System Admin", account: "ads@company.com" },
+        { id: "linkedin-ads-connection", title: "LinkedIn Ads", icon: Briefcase, type: "file", artifactType: "connection" as const, status: "shared", tag: "LinkedIn Ads", updated: "Dec 10, 2024", updatedBy: "John Smith", account: "marketing@company.com" },
+        { id: "tiktok-ads-connection", title: "TikTok Ads", icon: User, type: "file", artifactType: "connection" as const, status: "private", tag: "TikTok Ads", updated: "Dec 8, 2024", updatedBy: "Emma Davis", account: "social@company.com" },
+        { id: "twitter-ads-connection", title: "Twitter Ads", icon: User, type: "file", artifactType: "connection" as const, status: "private", tag: "Twitter Ads", updated: "Dec 5, 2024", updatedBy: "John Smith", account: "agency@marketing.com" },
+      ],
+    },
+    {
+      id: "data-explorer",
+      title: "Data Explorer",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        { id: "data-table-1", title: "Customer Segmentation", icon: Database, type: "file", artifactType: "query" as const, status: "template", tag: "Segmentation", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "RFM-based customer segments with behavioral clustering.", relatedTo: [{ id: "google-ads-connection", title: "Google Ads", type: "connection" }] },
+        { id: "data-table-2", title: "Conversion Funnel Analysis", icon: Database, type: "file", artifactType: "query" as const, status: "template", tag: "Funnel", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Step-by-step funnel drop-off analysis with attribution paths.", relatedTo: [{ id: "cross-channel-dashboard", title: "Cross Channel Dashboard", type: "dashboard" }] },
+        { id: "data-table-3", title: "Cohort Analysis", icon: Database, type: "file", artifactType: "query" as const, status: "template", tag: "Cohort", updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Time-based cohort retention and lifetime value analysis." },
+      ],
+    },
+    {
+      id: "recipes",
+      title: "Recipes",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        {
+          id: "recipe-audience-brand", title: "Audience & Brand", icon: FolderOpen, type: "folder",
+          children: [
+            {
+              id: "recipe-behavioral-analysis", title: "Behavioral Analysis", icon: FolderOpen, type: "folder",
+              children: [
+                {
+                  id: "recipe-engagement-scoring", title: "Engagement Scoring", icon: FolderOpen, type: "folder",
+                  children: [
+                    {
+                      id: "recipe-channel-attribution", title: "Channel Attribution", icon: FolderOpen, type: "folder",
+                      children: [
+                        {
+                          id: "recipe-predictive-models", title: "Predictive Models", icon: FolderOpen, type: "folder",
+                          children: [
+                            { id: "recipe-churn-prediction", title: "Churn Prediction", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "ML", status: "private" as const, updated: "Dec 6, 2024", updatedBy: "Emma Davis" },
+                            { id: "recipe-ltv-forecast", title: "LTV Forecast Model", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "ML", status: "template" as const, updated: "Dec 5, 2024", updatedBy: "System Admin" },
+                            { id: "recipe-propensity-scoring", title: "Purchase Propensity Score", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "ML", status: "shared" as const, updated: "Dec 4, 2024", updatedBy: "John Smith" },
+                          ],
+                        },
+                        { id: "recipe-first-touch-attr", title: "First Touch Attribution", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Attribution", status: "template" as const, updated: "Dec 8, 2024", updatedBy: "System Admin" },
+                        { id: "recipe-multi-touch-attr", title: "Multi-Touch Attribution", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Attribution", status: "shared" as const, updated: "Dec 7, 2024", updatedBy: "John Smith" },
+                      ],
+                    },
+                    { id: "recipe-lead-scoring-model", title: "Lead Scoring Model", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Scoring", status: "private" as const, updated: "Dec 10, 2024", updatedBy: "Emma Davis" },
+                    { id: "recipe-content-engagement", title: "Content Engagement Score", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Scoring", status: "shared" as const, updated: "Dec 9, 2024", updatedBy: "John Smith" },
+                  ],
+                },
+                { id: "recipe-session-flow", title: "Session Flow Analysis", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Behavior", status: "shared" as const, updated: "Dec 13, 2024", updatedBy: "John Smith" },
+                { id: "recipe-page-interaction", title: "Page Interaction Heatmap", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Behavior", status: "template" as const, updated: "Dec 11, 2024", updatedBy: "System Admin" },
+              ],
+            },
+            { id: "recipe-audience-segmentation", title: "Audience Segmentation by Source", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Audience", status: "shared" as const, updated: "Dec 14, 2024", updatedBy: "Emma Davis" },
+            { id: "recipe-brand-awareness", title: "Brand Awareness Metrics", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Brand", status: "template" as const, updated: "Dec 12, 2024", updatedBy: "System Admin" },
+            { id: "recipe-cross-channel-attribution", title: "Cross Channel Attribution Model", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Attribution", status: "shared" as const, updated: "Dec 10, 2024", updatedBy: "John Smith" },
+            { id: "recipe-email-engagement", title: "Email Campaign Engagement", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Email", status: "private" as const, updated: "Dec 8, 2024", updatedBy: "System Admin" },
+          ],
+        },
+        {
+          id: "recipe-channel-performance", title: "Channel Performance", icon: FolderOpen, type: "folder",
+          children: [
+            { id: "recipe-paid-ads-ga-basic", title: "Paid Ads Google Analytics - Basic Analytics", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Google Analytics", status: "template" as const, updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Core paid ads metrics from Google Analytics including sessions, bounce rate, and conversions." },
+            { id: "recipe-paid-ads-ga-campaign", title: "Paid Ads Google Analytics - Campaign Performance", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Google Analytics", status: "template" as const, updated: "Dec 15, 2024", updatedBy: "System Admin", description: "Campaign-level performance breakdown with cost and revenue attribution." },
+            { id: "recipe-int-tiktok-preview", title: "Int TikTok Ads Preview Prep", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "TikTok", status: "private" as const, updated: "Dec 13, 2024", updatedBy: "Emma Davis" },
+            { id: "recipe-meta-ads-funnel", title: "Meta Ads Conversion Funnel", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Meta", status: "shared" as const, updated: "Dec 11, 2024", updatedBy: "John Smith", description: "Full-funnel view from impression to purchase for Meta ad campaigns." },
+            { id: "recipe-linkedin-lead-quality", title: "LinkedIn Lead Quality Score", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "LinkedIn", status: "private" as const, updated: "Dec 9, 2024", updatedBy: "System Admin" },
+          ],
+        },
+        {
+          id: "recipe-google-ads", title: "Google Ads", icon: FolderOpen, type: "folder",
+          children: [
+            { id: "recipe-gads-keyword-perf", title: "Google Ads Keyword Performance", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Keywords", status: "template" as const, updated: "Dec 15, 2024", updatedBy: "System Admin" },
+            { id: "recipe-gads-campaign-roas", title: "Google Ads Campaign ROAS", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "ROAS", status: "shared" as const, updated: "Dec 14, 2024", updatedBy: "John Smith" },
+            { id: "recipe-gads-search-terms", title: "Google Ads Search Terms Analysis", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Search", status: "template" as const, updated: "Dec 13, 2024", updatedBy: "System Admin" },
+            { id: "recipe-gads-audience-insights", title: "Google Ads Audience Insights", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Audience", status: "private" as const, updated: "Dec 11, 2024", updatedBy: "Emma Davis" },
+          ],
+        },
+        { id: "recipe-weekly-kpi-rollup", title: "Weekly KPI Rollup", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "KPI", status: "shared" as const, updated: "Dec 15, 2024", updatedBy: "John Smith" },
+        { id: "recipe-customer-ltv", title: "Customer Lifetime Value", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Revenue", status: "template" as const, updated: "Dec 14, 2024", updatedBy: "System Admin" },
+        { id: "recipe-spend-vs-revenue", title: "Spend vs Revenue Summary", icon: FileText, type: "file", artifactType: "recipe" as const, tag: "Finance", status: "private" as const, updated: "Dec 13, 2024", updatedBy: "Emma Davis" },
+      ],
+    },
+    {
+      id: "admin",
+      title: "Admin",
+      icon: FolderOpen,
+      type: "folder",
+      children: [
+        { id: "service-desk", title: "Service Desk", icon: Settings, type: "file", artifactType: "settings" as const, status: "template", tag: "Support", updated: "Dec 15, 2024", updatedBy: "System Admin" },
+        { id: "dataflow", title: "Dataflow", icon: Database, type: "file", artifactType: "settings" as const, status: "template", tag: "Data Flow", updated: "Dec 15, 2024", updatedBy: "System Admin" },
+        { id: "billing", title: "Billing", icon: Users, type: "file", artifactType: "settings" as const, status: "template", tag: "Billing", updated: "Dec 15, 2024", updatedBy: "System Admin" },
+      ],
+    },
   ],
   "data-governance": [
     { id: "naming-convention", title: "Naming Convention", icon: BookOpen, type: "file" },

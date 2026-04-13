@@ -6,6 +6,7 @@ import { MainNavigation } from "@/components/main-navigation"
 import { CategoryNavigation } from "@/components/category-navigation"
 import { TopCategoryNavigation } from "@/components/top-category-navigation"
 import { CardCategoryNavigation } from "@/components/card-category-navigation"
+import { TabCategoryNavigation } from "@/components/tab-category-navigation"
 import type { NavMode } from "@/components/nav-mode-switcher"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { DashboardWorkflow } from "@/components/dashboard-workflow"
@@ -72,9 +73,12 @@ export default function Home() {
       const w = Number(saved)
       if (w >= 180 && w <= 480) setSidebarWidth(w)
     }
-    // Migrate old tab values
+  }, [])
+
+  // Migrate old tab values (separate effect to react to deferred localStorage read)
+  useEffect(() => {
     if (centerTab === "artifacts" || centerTab === "recents") setCenterTab("all")
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [centerTab, setCenterTab])
 
   // Sessions scoped to the currently selected nav item
   const scopedSessions = useMemo(
@@ -611,7 +615,7 @@ export default function Home() {
             navMode={navMode}
             onModeChange={setNavMode}
           />
-        ) : navMode === 'category' ? (
+        ) : navMode === 'category' || navMode === 'iconCategory' ? (
           <CategoryNavigation
             activeItem={activeNavItem}
             onItemSelect={handleNavItemSelect}
@@ -622,9 +626,22 @@ export default function Home() {
             onWidthChange={handleSidebarWidthChange}
             navMode={navMode}
             onModeChange={setNavMode}
+            iconOnly={navMode === 'iconCategory'}
           />
         ) : navMode === 'topCategory' ? (
           <TopCategoryNavigation
+            activeItem={activeNavItem}
+            onItemSelect={handleNavItemSelect}
+            onPlusClick={handlePlusClick}
+            isCollapsed={isNavCollapsed}
+            onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)}
+            sidebarWidth={sidebarWidth}
+            onWidthChange={handleSidebarWidthChange}
+            navMode={navMode}
+            onModeChange={setNavMode}
+          />
+        ) : navMode === 'tabCategory' ? (
+          <TabCategoryNavigation
             activeItem={activeNavItem}
             onItemSelect={handleNavItemSelect}
             onPlusClick={handlePlusClick}

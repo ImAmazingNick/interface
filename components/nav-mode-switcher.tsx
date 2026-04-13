@@ -3,15 +3,17 @@
 import { memo } from "react"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ListTree, LayoutGrid, PanelTop, Grid2x2, ChevronDown } from "lucide-react"
+import { ListTree, LayoutGrid, PanelTop, Grid2x2, PanelLeftClose, ChevronDown, Columns2 } from "lucide-react"
 
-export type NavMode = "tree" | "category" | "topCategory" | "cardCategory"
+export type NavMode = "tree" | "category" | "iconCategory" | "topCategory" | "cardCategory" | "tabCategory"
 
 const NAV_MODES: { id: NavMode; label: string; description: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "tree",         label: "Tree",           description: "Single tree navigation",      icon: ListTree },
   { id: "category",     label: "Side tabs",      description: "Vertical tabs with tree",     icon: LayoutGrid },
+  { id: "iconCategory", label: "Icon strip",     description: "Compact icon tabs with tree", icon: PanelLeftClose },
   { id: "topCategory",  label: "Top tabs",       description: "Horizontal tabs with tree",   icon: PanelTop },
   { id: "cardCategory", label: "Card grid",      description: "Card grid with tree",         icon: Grid2x2 },
+  { id: "tabCategory",  label: "Three tabs",     description: "Knowledge, Sessions, Artefacts", icon: Columns2 },
 ]
 
 export const NavModeSwitcher = memo(function NavModeSwitcher({
