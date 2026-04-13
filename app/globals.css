@@ -127,6 +127,15 @@
   }
 }
 
+/* Hide scrollbar while keeping scroll functionality */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Reduced motion: disable CSS transitions & animations */
 @media (prefers-reduced-motion: reduce) {
   *,

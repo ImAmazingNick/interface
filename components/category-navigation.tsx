@@ -4,19 +4,18 @@ import type React from "react"
 import { memo, useCallback, useRef, useState, useMemo, useEffect, forwardRef } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { WORKSPACES, CATEGORY_GROUPS, CATEGORY_TREES } from "@/constants"
+import { CATEGORY_GROUPS, CATEGORY_TREES } from "@/constants"
 import { getCategoryForNavItem } from "@/lib/navigation"
 import type { MainNavigationProps } from "@/types"
+import { NavModeSwitcher, type NavMode } from "@/components/nav-mode-switcher"
+import { SidebarWorkspaceSelector, SidebarUserProfile } from "@/components/sidebar-shared"
 import {
   ChevronDown, ChevronRight, FolderOpen, Folder, Plus,
   Search, ChevronsUpDown, ChevronsDownUp, ListTree, X,
-  Settings, Users, Bot, Bell, User, LogOut,
 } from "lucide-react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
 
 // Collect all folder IDs from a tree (for expand/collapse all)
-function collectFolderIds(items: any[]): string[] {
+export function collectFolderIds(items: any[]): string[] {
   const ids: string[] = []
   for (const item of items) {
     if (item.type === "folder") {
@@ -29,7 +28,7 @@ function collectFolderIds(items: any[]): string[] {
 
 // ─── Highlighted search text ───
 
-const HighlightedText = memo(function HighlightedText({ text, query }: { text: string; query: string }) {
+export const HighlightedText = memo(function HighlightedText({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>
   const lower = text.toLowerCase()
   const qLower = query.toLowerCase()
@@ -46,7 +45,7 @@ const HighlightedText = memo(function HighlightedText({ text, query }: { text: s
 
 // ─── Tree item renderer ───
 
-const CategoryTreeItem = memo(function CategoryTreeItem({
+export const CategoryTreeItem = memo(function CategoryTreeItem({
   item,
   level = 0,
   isFirst = false,
@@ -174,6 +173,15 @@ const CategoryTreeItem = memo(function CategoryTreeItem({
             <HighlightedText text={item.title} query={searchQuery} />
           </span>
 
+          {item.tag && (
+            <span className={cn(
+              "ml-auto text-xs text-sidebar-foreground/40 tabular-nums flex-shrink-0",
+              isFolder && hasChildren && "group-hover:hidden",
+            )}>
+              {item.tag}
+            </span>
+          )}
+
           {isFolder && hasChildren && (
             <span
               role="button"
@@ -193,6 +201,17 @@ const CategoryTreeItem = memo(function CategoryTreeItem({
           )}
         </div>
       </Button>
+
+      {isFolder && isExpanded && item.description && (
+        <div className="px-3 py-1.5 text-xs text-sidebar-foreground/50 leading-relaxed" style={{ paddingLeft: `${(level + 1) * 10 + 16}px` }}>
+          {item.description.length > 120 ? (
+            <>
+              {item.description.slice(0, 120)}...
+              <button className="ml-1 text-primary/70 hover:text-primary text-xs cursor-pointer">show more</button>
+            </>
+          ) : item.description}
+        </div>
+      )}
 
       {isFolder && hasChildren && isExpanded && (
         <div className="ml-1 border-l border-sidebar-border/50">
@@ -256,78 +275,19 @@ const CategoryStripButton = memo(function CategoryStripButton({
   )
 })
 
-const CategoryWorkspaceSelector = memo(function CategoryWorkspaceSelector() {
-  const [currentWorkspace] = useState("business")
-  const workspace = WORKSPACES.find((ws) => ws.id === currentWorkspace) || WORKSPACES[0]
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="w-8 h-8 p-0 text-xs font-medium"
-      aria-label={workspace.name}
-    >
-      {workspace.name.charAt(0).toUpperCase()}
-    </Button>
-  )
+// CategoryWorkspaceSelector — re-export the shared component for backward compat
+export const CategoryWorkspaceSelector = memo(function CategoryWorkspaceSelector({ variant = "compact" }: { variant?: "full" | "inline" | "compact" }) {
+  return <SidebarWorkspaceSelector variant={variant} />
 })
 
-const CATEGORY_USER_POPOVER_ITEMS = [
-  { type: "label" as const, label: "Organization" },
-  { id: "general", label: "General", icon: Settings },
-  { id: "members", label: "Members", icon: Users },
-  { id: "ai-agent", label: "AI Agent", icon: Bot },
-  { type: "separator" as const },
-  { type: "label" as const, label: "Account" },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "user-settings", label: "User settings", icon: User },
-  { type: "separator" as const },
-  { id: "logout", label: "Log out", icon: LogOut },
-]
-
-const CategoryUserProfile = memo(function CategoryUserProfile() {
-  return (
-    <div className="border-t border-sidebar-border/50 p-3">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            className="flex justify-center w-full rounded-lg p-1 -m-1 transition-colors hover:bg-sidebar-accent/30 cursor-pointer"
-            title="John Doe"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center ring-1 ring-sidebar-border/20">
-              <span className="text-xs font-semibold text-primary-foreground">JD</span>
-            </div>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="right" align="end" className="w-56 p-1.5">
-          {CATEGORY_USER_POPOVER_ITEMS.map((item, idx) => {
-            if (item.type === "separator") return <Separator key={`sep-${idx}`} className="my-1" />
-            if (item.type === "label") return (
-              <p key={item.label} className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{item.label}</p>
-            )
-            const Icon = item.icon!
-            return (
-              <button
-                key={item.id}
-                className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground",
-                  item.id === "logout" && "text-destructive hover:text-destructive"
-                )}
-                onClick={() => console.log("Navigate to:", item.id)}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
+// CategoryUserProfile — re-export the shared component for backward compat
+export const CategoryUserProfile = memo(function CategoryUserProfile({ variant = "compact" }: { variant?: "full" | "compact" }) {
+  return <SidebarUserProfile variant={variant} />
 })
 
 // ─── CategoryTreePanel ───
 
-const CategoryTreePanel = forwardRef<HTMLInputElement, {
+export const CategoryTreePanel = forwardRef<HTMLInputElement, {
   categoryLabel: string
   items: any[]
   activeItem: string
@@ -339,7 +299,8 @@ const CategoryTreePanel = forwardRef<HTMLInputElement, {
   expandedIds: Set<string>
   searchQuery: string
   onSearchChange: (query: string) => void
-  width: number
+  width: number | string
+  className?: string
 }>(function CategoryTreePanel({
   categoryLabel,
   items,
@@ -353,10 +314,11 @@ const CategoryTreePanel = forwardRef<HTMLInputElement, {
   searchQuery,
   onSearchChange,
   width,
+  className,
 }, ref) {
   return (
     <div
-      className="h-screen bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden"
+      className={cn("h-screen bg-sidebar border-r border-sidebar-border flex flex-col overflow-hidden", className)}
       style={{ width }}
     >
       {/* Header with label and controls */}
@@ -445,7 +407,7 @@ const CategoryTreePanel = forwardRef<HTMLInputElement, {
 
 // ─── Search filtering helper ───
 
-function filterTreeItems(items: any[], query: string): any[] {
+export function filterTreeItems(items: any[], query: string): any[] {
   if (!query) return items
   const lq = query.toLowerCase()
   const result: any[] = []
@@ -485,7 +447,7 @@ function itemMatchesQuery(item: any, lq: string): boolean {
 }
 
 // Collect folder IDs from filtered tree (for auto-expanding during search)
-function collectAllFolderIds(items: any[]): string[] {
+export function collectAllFolderIds(items: any[]): string[] {
   const ids: string[] = []
   for (const item of items) {
     if (item.type === "folder") {
@@ -505,7 +467,9 @@ export const CategoryNavigation = memo(function CategoryNavigation({
   sidebarWidth = 240,
   onWidthChange,
   onModeToggle,
-}: MainNavigationProps & { onPlusClick?: (id: string) => void; onModeToggle?: () => void }) {
+  navMode = "category",
+  onModeChange,
+}: MainNavigationProps & { onPlusClick?: (id: string) => void; onModeToggle?: () => void; navMode?: NavMode; onModeChange?: (mode: NavMode) => void }) {
   const [activeCategory, setActiveCategory] = useState<string | null>(() => {
     return getCategoryForNavItem(activeItem)
   })
@@ -675,14 +639,10 @@ export const CategoryNavigation = memo(function CategoryNavigation({
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
               <span className="text-sm font-bold text-primary-foreground">CF</span>
             </div>
-            {onModeToggle && (
-              <button
-                className="absolute -right-1.5 -top-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-sidebar border border-sidebar-border/50 text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors cursor-pointer"
-                onClick={onModeToggle}
-                title="Switch to tree view"
-              >
-                <ListTree className="h-2.5 w-2.5" />
-              </button>
+            {onModeChange && (
+              <div className="absolute -right-2 -top-2">
+                <NavModeSwitcher currentMode={navMode} onModeChange={onModeChange} />
+              </div>
             )}
           </div>
           <CategoryWorkspaceSelector />

@@ -4,17 +4,10 @@ import type React from "react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { TREE_NAVIGATION, WORKSPACES } from "@/constants"
+import { TREE_NAVIGATION } from "@/constants"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import type { MainNavigationProps, TreeNavigationItem as TreeNavItemType } from "@/types"
-import { ChevronDown, ChevronRight, FolderOpen, Folder, FolderPlus, Plus, Search, X, Lock, Users2, Settings, Users, Bot, Bell, User, LogOut } from "lucide-react"
+import { ChevronDown, ChevronRight, FolderOpen, Folder, FolderPlus, Plus, Search, X, Lock, Users2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
@@ -23,10 +16,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Separator } from "@/components/ui/separator"
 import { TreeContextMenu } from "@/components/tree-context-menu"
 import { InlineTreeInput } from "@/components/inline-tree-input"
 import { getAllDescendantIds, getNavItem as getNavItemUtil } from "@/lib/navigation"
+import { NavModeSwitcher, type NavMode } from "@/components/nav-mode-switcher"
+import { SidebarWorkspaceSelector, SidebarUserProfile } from "@/components/sidebar-shared"
 
 const NavigationItem = memo(function NavigationItem({
   item,
@@ -64,57 +58,7 @@ const NavigationItem = memo(function NavigationItem({
   )
 })
 
-const WorkspaceSelector = memo(function WorkspaceSelector({ isCollapsed }: { isCollapsed: boolean }) {
-  const [currentWorkspace, setCurrentWorkspace] = useState("business")
-
-  const handleWorkspaceSelect = useCallback((workspaceId: string) => {
-    // TODO: Implement workspace switching logic
-    console.log('Switching to workspace:', workspaceId)
-    setCurrentWorkspace(workspaceId)
-  }, [])
-
-  if (isCollapsed) {
-    const workspace = WORKSPACES.find(ws => ws.id === currentWorkspace) || WORKSPACES[0]
-    return (
-      <div className="flex justify-center">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-8 h-8 p-0 text-xs font-medium"
-          aria-label={workspace.name}
-        >
-          {workspace.name.charAt(0).toUpperCase()}
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <Select value={currentWorkspace} onValueChange={handleWorkspaceSelect}>
-      <SelectTrigger className="w-full h-9 px-3 cursor-pointer">
-        <SelectValue>
-          {(() => {
-            const workspace = WORKSPACES.find(ws => ws.id === currentWorkspace) || WORKSPACES[0]
-            return (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{workspace.name}</span>
-              </div>
-            )
-          })()}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {WORKSPACES.map((workspace) => (
-          <SelectItem key={workspace.id} value={workspace.id}>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{workspace.name}</span>
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-})
+// WorkspaceSelector and UserProfile are now shared via sidebar-shared.tsx
 
 function filterTreeItems(items: any[], query: string): any[] {
   if (!query.trim()) return items
@@ -626,74 +570,7 @@ const TreeNavigationItem = memo(function TreeNavigationItem({
   )
 })
 
-const USER_POPOVER_ITEMS = [
-  { type: "label" as const, label: "Organization" },
-  { id: "general", label: "General", icon: Settings },
-  { id: "members", label: "Members", icon: Users },
-  { id: "ai-agent", label: "AI Agent", icon: Bot },
-  { type: "separator" as const },
-  { type: "label" as const, label: "Account" },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "user-settings", label: "User settings", icon: User },
-  { type: "separator" as const },
-  { id: "logout", label: "Log out", icon: LogOut },
-]
-
-const UserProfile = memo(function UserProfile({ isCollapsed }: { isCollapsed: boolean }) {
-  return (
-    <div className={cn("border-t border-sidebar-border/50", isCollapsed ? "p-3" : "p-4")}>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            className={cn(
-              "flex items-center gap-3 w-full rounded-lg p-1.5 -m-1.5 transition-colors hover:bg-sidebar-accent/30 cursor-pointer",
-              isCollapsed && "justify-center"
-            )}
-            title={isCollapsed ? "John Doe" : undefined}
-          >
-            <div className={cn(
-              "rounded-full bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center ring-1 ring-sidebar-border/20",
-              isCollapsed ? "w-8 h-8" : "w-10 h-10"
-            )}>
-              <span className={cn(
-                "font-semibold text-primary-foreground",
-                isCollapsed ? "text-xs" : "text-sm"
-              )}>JD</span>
-            </div>
-            {!isCollapsed && (
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">John Doe</p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">john@example.com</p>
-              </div>
-            )}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="start" className="w-56 p-1.5">
-          {USER_POPOVER_ITEMS.map((item, idx) => {
-            if (item.type === "separator") return <Separator key={`sep-${idx}`} className="my-1" />
-            if (item.type === "label") return (
-              <p key={item.label} className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{item.label}</p>
-            )
-            const Icon = item.icon!
-            return (
-              <button
-                key={item.id}
-                className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground",
-                  item.id === "logout" && "text-destructive hover:text-destructive"
-                )}
-                onClick={() => console.log("Navigate to:", item.id)}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
-})
+// USER_POPOVER_ITEMS and UserProfile removed — using SidebarUserProfile from sidebar-shared.tsx
 
 // Compute default expanded folder IDs from TREE_NAVIGATION
 function collectExpandedIds(items: readonly any[]): string[] {
@@ -720,7 +597,9 @@ export const MainNavigation = memo(function MainNavigation({
   onDeleteItem,
   onRestoreDeletedItem,
   getDeletedItem,
-}: MainNavigationProps) {
+  navMode = "tree",
+  onModeChange,
+}: MainNavigationProps & { navMode?: NavMode; onModeChange?: (mode: NavMode) => void }) {
   // Persist expanded folder IDs across sessions
   const [expandedIds, setExpandedIds] = useLocalStorage<string[]>('nav-expanded-folders', DEFAULT_EXPANDED_IDS)
 
@@ -1009,15 +888,18 @@ export const MainNavigation = memo(function MainNavigation({
             </span>
           </div>
           {!isCollapsed && (
-            <div className="ml-3">
+            <div className="ml-3 flex-1">
               <h1 className="text-lg font-heading font-bold text-sidebar-foreground">Core Flow</h1>
             </div>
+          )}
+          {!isCollapsed && onModeChange && (
+            <NavModeSwitcher currentMode={navMode} onModeChange={onModeChange} />
           )}
         </div>
 
         {/* Workspace Selector */}
         <div className={cn(isCollapsed ? "flex justify-center" : "")}>
-          <WorkspaceSelector isCollapsed={isCollapsed} />
+          <SidebarWorkspaceSelector variant={isCollapsed ? "compact" : "full"} />
         </div>
       </div>
 
@@ -1112,7 +994,7 @@ export const MainNavigation = memo(function MainNavigation({
       </nav>
 
       <div className={cn(isCollapsed ? "pr-2" : "pr-2")}>
-        <UserProfile isCollapsed={isCollapsed} />
+        <SidebarUserProfile variant={isCollapsed ? "compact" : "full"} />
       </div>
     </div>
   )

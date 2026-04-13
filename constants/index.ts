@@ -840,6 +840,7 @@ export const TREE_NAVIGATION = [
 ] as const
 
 export const CATEGORY_GROUPS = [
+  { id: "knowledge",       label: "Knowledge",      icon: BookOpen,       navItemIds: ["kb-data-sources", "kb-general-knowledge", "kb-general-research", "kb-shared-doc"] },
   { id: "ai-agent",        label: "AI Agent",       icon: Sparkles,       navItemIds: ["ai-agent", "chats", "chat-compare-ad-spend", "chat-conversion-drop", "chat-cohort-analysis", "chat-top-keywords", "chat-revenue-attribution", "chat-email-dashboard", "chat-roas-meta", "chat-weekly-report"] },
   { id: "dashboards",      label: "Dashboards",     icon: BarChart3,      navItemIds: ["dashboards"] },
   { id: "connections",     label: "Connections",    icon: Plug,           navItemIds: ["connections", "dest-warehouse", "dest-analytics", "dest-cloud"] },
@@ -849,7 +850,70 @@ export const CATEGORY_GROUPS = [
   { id: "admin",           label: "Admin",          icon: Settings,       navItemIds: ["admin"] },
 ]
 
+export const CARD_CATEGORY_GROUPS = [
+  { id: "knowledge",       label: "Knowledge",      icon: BookOpen,       treeKey: "knowledge" },
+  { id: "ai-agent",        label: "Sessions",       icon: MessageSquare,  treeKey: "ai-agent" },
+  { id: "connections",     label: "Connections",    icon: Plug,           treeKey: "connections" },
+  { id: "recipes",         label: "Recipes",        icon: ArrowRightLeft, treeKey: "recipes" },
+  { id: "dashboards",      label: "Dashboards",     icon: BarChart3,      treeKey: "dashboards" },
+  { id: "data-governance", label: "Governance",     icon: Shield,         treeKey: "data-governance" },
+]
+
 export const CATEGORY_TREES: Record<string, any[]> = {
+  "knowledge": [
+    {
+      id: "kb-data-sources", title: "Data sources and vendors", icon: FolderOpen, type: "folder", tag: "607",
+      children: [
+        { id: "kb-ds-vendor-integrations", title: "Vendor integrations", icon: FileText, type: "file", tag: "312" },
+        { id: "kb-ds-api-docs", title: "API documentation", icon: FileText, type: "file", tag: "295" },
+      ],
+    },
+    {
+      id: "kb-general-knowledge", title: "General Knowledge", icon: FolderOpen, type: "folder", tag: "1",
+      children: [
+        { id: "kb-gk-overview", title: "Overview", icon: FileText, type: "file" },
+      ],
+    },
+    {
+      id: "kb-general-research", title: "General Knowledge and Research", icon: FolderOpen, type: "folder", tag: "101",
+      description: "Cross-domain learning and technical research notes. Covers Engineering topics (AI agents, knowledge graphs, LLMs), Philosophy, Marketing strategies, Causal Intelligence, and Ontological modeling.",
+      children: [
+        { id: "kb-causal-intelligence", title: "Causal Intelligence", icon: FolderOpen, type: "folder", tag: "2", children: [
+          { id: "kb-ci-intro", title: "Introduction to Causal Inference", icon: FileText, type: "file" },
+          { id: "kb-ci-methods", title: "Causal Methods Overview", icon: FileText, type: "file" },
+        ]},
+        { id: "kb-engineering", title: "Engineering", icon: FolderOpen, type: "folder", tag: "68", children: [
+          { id: "kb-eng-ai-agents", title: "AI Agents", icon: FileText, type: "file", tag: "12" },
+          { id: "kb-eng-knowledge-graphs", title: "Knowledge Graphs", icon: FileText, type: "file", tag: "15" },
+          { id: "kb-eng-llms", title: "Large Language Models", icon: FileText, type: "file", tag: "18" },
+          { id: "kb-eng-data-pipelines", title: "Data Pipelines", icon: FileText, type: "file", tag: "11" },
+          { id: "kb-eng-infrastructure", title: "Infrastructure", icon: FileText, type: "file", tag: "12" },
+        ]},
+        { id: "kb-humans", title: "Humans - society body mind", icon: FolderOpen, type: "folder", tag: "19", children: [
+          { id: "kb-humans-cognitive", title: "Cognitive Science", icon: FileText, type: "file", tag: "7" },
+          { id: "kb-humans-social", title: "Social Dynamics", icon: FileText, type: "file", tag: "6" },
+          { id: "kb-humans-health", title: "Health & Wellness", icon: FileText, type: "file", tag: "6" },
+        ]},
+        { id: "kb-marketing", title: "Marketing", icon: FolderOpen, type: "folder", tag: "4", children: [
+          { id: "kb-mktg-strategy", title: "Marketing Strategy", icon: FileText, type: "file" },
+          { id: "kb-mktg-analytics", title: "Marketing Analytics", icon: FileText, type: "file" },
+          { id: "kb-mktg-content", title: "Content Marketing", icon: FileText, type: "file" },
+          { id: "kb-mktg-growth", title: "Growth Hacking", icon: FileText, type: "file" },
+        ]},
+        { id: "kb-ontologies", title: "Ontologies and World modeling", icon: FolderOpen, type: "folder", tag: "4", children: [
+          { id: "kb-onto-foundations", title: "Ontological Foundations", icon: FileText, type: "file" },
+          { id: "kb-onto-knowledge-rep", title: "Knowledge Representation", icon: FileText, type: "file" },
+          { id: "kb-onto-semantic-web", title: "Semantic Web", icon: FileText, type: "file" },
+          { id: "kb-onto-world-models", title: "World Models", icon: FileText, type: "file" },
+        ]},
+        { id: "kb-philosophy", title: "Philosophy", icon: FolderOpen, type: "folder", tag: "2", children: [
+          { id: "kb-phil-epistemology", title: "Epistemology", icon: FileText, type: "file" },
+          { id: "kb-phil-ethics-ai", title: "Ethics of AI", icon: FileText, type: "file" },
+        ]},
+        { id: "kb-shared-doc", title: "shared-doc", icon: FileText, type: "file", updated: "Apr 06, 2026" },
+      ],
+    },
+  ],
   "ai-agent": [
     { id: "personal-chats", title: "Personal", icon: Lock, type: "folder", children: [
       { id: "chat-compare-ad-spend", title: "Compare Q4 vs Q1 ad spend by channel", icon: MessageSquare, type: "file", artifactType: "chat" as const },

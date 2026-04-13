@@ -4,6 +4,9 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels"
 import { MainNavigation } from "@/components/main-navigation"
 import { CategoryNavigation } from "@/components/category-navigation"
+import { TopCategoryNavigation } from "@/components/top-category-navigation"
+import { CardCategoryNavigation } from "@/components/card-category-navigation"
+import type { NavMode } from "@/components/nav-mode-switcher"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { DashboardWorkflow } from "@/components/dashboard-workflow"
 import { AppSetupStep } from "@/components/app-setup-step"
@@ -27,7 +30,7 @@ import { cn } from "@/lib/utils"
 import { isNavFolder, getNavItem, getNavChildren, getAncestorIds, getAllDescendantIds, getArtifactTypesInFolder, getSessionsInScope } from "@/lib/navigation"
 import { useNavigationTree } from "@/hooks/use-navigation-tree"
 import type { TabConfig } from "@/components/center-view-tabs"
-import { LayoutGrid, MessageSquare } from "lucide-react"
+import { MessageSquare } from "lucide-react"
 import type { Step, ArtifactPanelContent } from "@/types"
 import type { SelectedSourceData } from "@/types/setup-interfaces"
 
@@ -35,7 +38,7 @@ export default function Home() {
   const [activeNavItem, setActiveNavItem] = useState("ai-agent")
   const [isNavCollapsed, setIsNavCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(256)
-  const [navMode, setNavMode] = useLocalStorage<'tree' | 'category'>('nav-mode', 'tree')
+  const [navMode, setNavMode] = useLocalStorage<NavMode>('nav-mode', 'tree')
   const [centerTab, setCenterTab] = useLocalStorage<string>('center-tab', 'all')
   const [folderTabStates, setFolderTabStates] = useLocalStorage<Record<string, string>>('folder-tab-states', {})
   const {
@@ -605,8 +608,10 @@ export default function Home() {
             onDeleteItem={handleDeleteItem}
             onRestoreDeletedItem={restoreDeletedItem}
             getDeletedItem={getDeletedItem}
+            navMode={navMode}
+            onModeChange={setNavMode}
           />
-        ) : (
+        ) : navMode === 'category' ? (
           <CategoryNavigation
             activeItem={activeNavItem}
             onItemSelect={handleNavItemSelect}
@@ -615,18 +620,33 @@ export default function Home() {
             onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)}
             sidebarWidth={sidebarWidth}
             onWidthChange={handleSidebarWidthChange}
-            onModeToggle={() => setNavMode('tree')}
+            navMode={navMode}
+            onModeChange={setNavMode}
           />
-        )}
-        {/* Nav mode toggle — only in tree mode (category mode has its own toggle in the strip) */}
-        {navMode === 'tree' && (
-          <button
-            className="absolute top-4 right-7 z-20 w-7 h-7 flex items-center justify-center rounded-md bg-sidebar hover:bg-sidebar-accent/40 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors duration-200 cursor-pointer"
-            onClick={() => setNavMode('category')}
-            title="Switch to category view"
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-          </button>
+        ) : navMode === 'topCategory' ? (
+          <TopCategoryNavigation
+            activeItem={activeNavItem}
+            onItemSelect={handleNavItemSelect}
+            onPlusClick={handlePlusClick}
+            isCollapsed={isNavCollapsed}
+            onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)}
+            sidebarWidth={sidebarWidth}
+            onWidthChange={handleSidebarWidthChange}
+            navMode={navMode}
+            onModeChange={setNavMode}
+          />
+        ) : (
+          <CardCategoryNavigation
+            activeItem={activeNavItem}
+            onItemSelect={handleNavItemSelect}
+            onPlusClick={handlePlusClick}
+            isCollapsed={isNavCollapsed}
+            onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)}
+            sidebarWidth={sidebarWidth}
+            onWidthChange={handleSidebarWidthChange}
+            navMode={navMode}
+            onModeChange={setNavMode}
+          />
         )}
       </div>
       <main className="flex-1 overflow-hidden">
