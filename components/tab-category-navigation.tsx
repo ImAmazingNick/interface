@@ -31,7 +31,7 @@ const TabButton = memo(function TabButton({
   return (
     <button
       className={cn(
-        "flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+        "flex-1 flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-lg font-medium transition-all duration-200 cursor-pointer",
         isActive
           ? "bg-primary/10 text-primary ring-1 ring-primary/20 shadow-sm"
           : "text-sidebar-foreground/50 hover:text-sidebar-foreground/80 hover:bg-sidebar-accent/30",
@@ -39,8 +39,8 @@ const TabButton = memo(function TabButton({
       onClick={onClick}
       title={group.label}
     >
-      <Icon className="h-4 w-4 flex-shrink-0" />
-      <span className="truncate">{group.label}</span>
+      <Icon className="h-5 w-5 flex-shrink-0" />
+      <span className="text-xs truncate">{group.label}</span>
     </button>
   )
 })
